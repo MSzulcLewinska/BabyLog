@@ -38,6 +38,21 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BabyLog potrzebuje dostępu do zdjęć, aby ustawić zdjęcie dziecka.",
+          "cameraPermission": "BabyLog potrzebuje dostępu do aparatu, aby zrobić zdjęcie dziecka.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#34C759"
+        }
       ]
     ],
     "experiments": {
