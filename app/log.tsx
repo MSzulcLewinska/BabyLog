@@ -12,6 +12,7 @@ import {
   loadActivities,
   loadChild,
   loadUser,
+  newId,
 } from '@/lib/storage';
 import type { Activity, EventKind } from '@/lib/types';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
@@ -79,12 +80,12 @@ export default function LogScreen() {
       ]);
       const author =
         user?.name?.trim() ||
-        childProfile.members.find((member) => member.role === 'owner')
+        childProfile?.members.find((member) => member.role === 'owner')
           ?.name ||
         undefined;
 
       await addEvent({
-        id: Date.now().toString(),
+        id: newId(),
         kind,
         activityId: meta.id,
         title: titleForEvent,

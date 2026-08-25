@@ -58,6 +58,14 @@ export default function LoginScreen() {
           )}
         </Pressable>
 
+        <Text style={styles.joinHint}>Druga osoba z rodziny?</Text>
+        <Pressable
+          style={({ pressed }) => [styles.joinButton, pressed && { opacity: 0.7 }]}
+          onPress={() => router.push('/join' as Href)}
+        >
+          <Text style={styles.joinLabel}>Dołącz kodem dziecka →</Text>
+        </Pressable>
+
         <Text style={styles.note}>
           Twoje dane pozostają zapisane na tym urządzeniu
         </Text>
@@ -136,6 +144,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Palette.text,
+  },
+  joinHint: {
+    fontSize: 13,
+    color: Palette.textMuted,
+    marginTop: 28,
+  },
+  joinButton: {
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  joinLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Palette.greenDark,
   },
   note: {
     fontSize: 12,

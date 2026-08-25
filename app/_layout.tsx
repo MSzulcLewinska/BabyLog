@@ -38,10 +38,13 @@ function RootNavigator() {
     if (!ready) return;
 
     const current = segments[0];
-    const onAuthScreen = current === 'login' || current === 'setup-child';
+    const onAuthScreen =
+      current === 'login' || current === 'setup-child' || current === 'join';
 
     if (!signedIn) {
-      if (current !== 'login') router.replace('/login' as Href);
+      if (current !== 'login' && current !== 'join') {
+        router.replace('/login' as Href);
+      }
       return;
     }
 

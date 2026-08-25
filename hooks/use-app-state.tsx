@@ -1,10 +1,11 @@
 import {
+  createChildWithOwner,
   hasSavedChild,
-  loadChild,
   loadUser,
-  saveChild,
+  migrateLocalToCloud,
   saveUser,
 } from '@/lib/storage';
+import { loadSession } from '@/lib/supabase';
 import type { UserAccount } from '@/lib/types';
 import {
   createContext,
@@ -22,6 +23,7 @@ type AppStateValue = {
   onboarded: boolean;
   signIn: (user?: Partial<UserAccount>) => Promise<void>;
   completeSetup: (name: string, photoUri?: string) => Promise<void>;
+  markJoined: () => void;
 };
 
 const AppStateContext = createContext<AppStateValue | null>(null);
@@ -30,18 +32,31 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
+  const [userName, setUserName] = useState('');
 
   useEffect(() => {
     let active = true;
 
-    Promise.all([loadUser(), hasSavedChild()]).then(
-      ([user, childSaved]) => {
-        if (!active) return;
-        setSignedIn(Boolean(user));
-        setOnboarded(childSaved);
-        setReady(true);
+    const boot = async () => {
+      const [user, session] = await Promise.all([loadUser(), loadSession()]);
+
+      if (!session && user) {
+        // Stare dane lokalne (przed Supabase) — jednorazowa migracja do chmury
+        await migrateLocalToCloud(user.name || 'Właściciel');
       }
-    );
+
+      const finalSession = session ?? (await loadSession());
+      const childSaved = await hasSavedChild();
+
+      if (!active) return;
+
+      setUserName(user?.name ?? '');
+      setSignedIn(Boolean(user) || Boolean(finalSession));
+      setOnboarded(Boolean(finalSession) || childSaved);
+      setReady(true);
+    };
+
+    void boot();
 
     return () => {
       active = false;
@@ -56,26 +71,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       name: user?.name,
       signedInAt: new Date().toISOString(),
     };
-    await saveUser(account);
+    await saveUser(account);    setUserName(account.name ?? '');
     setSignedIn(true);
   }, []);
 
   const completeSetup = useCallback(
     async (name: string, photoUri?: string) => {
-      const base = await loadChild();
-      await saveChild({
-        ...base,
-        name: name.trim(),
-        photoUri: photoUri ?? base.photoUri,
-      });
+      await createChildWithOwner(
+        name.trim(),
+        photoUri,
+        userName.trim() || 'Właściciel'
+      );
       setOnboarded(true);
     },
-    []
+    [userName]
   );
 
+  const markJoined = useCallback(() => {
+    setSignedIn(true);
+    setOnboarded(true);
+  }, []);
+
   const value = useMemo(
-    () => ({ ready, signedIn, onboarded, signIn, completeSetup }),
-    [ready, signedIn, onboarded, signIn, completeSetup]
+    () => ({ ready, signedIn, onboarded, signIn, completeSetup, markJoined }),
+    [ready, signedIn, onboarded, signIn, completeSetup, markJoined]
   );
 
   return (

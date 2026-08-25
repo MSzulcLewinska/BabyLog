@@ -3,7 +3,6 @@ import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
 import { useAppState } from '@/hooks/use-app-state';
 import { chooseProfileImage } from '@/lib/images';
-import { loadChild, saveChild } from '@/lib/storage';
 import KeyboardAwareForm from '@/components/KeyboardAwareForm';
 import { router, type Href } from 'expo-router';
 import { useState } from 'react';
@@ -23,9 +22,6 @@ export default function SetupChildScreen() {
     if (!uri) return;
 
     setPhotoUri(uri);
-
-    const base = await loadChild();
-    await saveChild({ ...base, photoUri: uri });
   };
 
   const handleSave = async () => {
@@ -40,6 +36,11 @@ export default function SetupChildScreen() {
     try {
       await completeSetup(name.trim(), photoUri ?? undefined);
       router.replace('/(tabs)' as Href);
+    } catch {
+      Alert.alert(
+        'Coś poszło nie tak',
+        'Nie udało się utworzyć profilu. Sprawdź internet i spróbuj ponownie.'
+      );
     } finally {
       setSaving(false);
     }

@@ -3,7 +3,7 @@ import { BackHeader } from '@/components/back-header';
 import { FormField } from '@/components/form-field';
 import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
-import { addActivity } from '@/lib/storage';
+import { addActivity, newId } from '@/lib/storage';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -24,7 +24,7 @@ export default function AddActivityScreen() {
     }
 
     await addActivity({
-      id: `custom-${Date.now()}`,
+      id: newId(),
       name: name.trim(),
       icon,
       unit: unit.trim() || undefined,

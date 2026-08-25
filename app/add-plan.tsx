@@ -12,7 +12,7 @@ import {
   reminderDate,
   schedulePlanReminder,
 } from '@/lib/reminders';
-import { addPlan, loadActivities } from '@/lib/storage';
+import { addPlan, loadActivities, newId } from '@/lib/storage';
 import type { Activity, Plan, ReminderKind } from '@/lib/types';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -61,7 +61,7 @@ export default function AddPlanScreen() {
     if (!selectedActivity) return;
 
     const plan: Plan = {
-      id: `plan-${Date.now()}`,
+      id: newId(),
       activityId: selectedActivity.id,
       title: selectedActivity.name,
       icon: selectedActivity.icon,

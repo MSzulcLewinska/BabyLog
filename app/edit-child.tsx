@@ -5,12 +5,13 @@ import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
 import { formatChildAge, parseDateKey, toDateKey } from '@/lib/dates';
 import { chooseProfileImage } from '@/lib/images';
+import KeyboardAwareForm from '@/components/KeyboardAwareForm';
 import { loadChild, saveChild } from '@/lib/storage';
 import type { ChildProfile } from '@/lib/types';
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 export default function EditChildScreen() {
   const [name, setName] = useState('');
@@ -25,7 +26,7 @@ export default function EditChildScreen() {
       let active = true;
 
       loadChild().then((loaded) => {
-        if (!active) return;
+        if (!active || !loaded) return;
         setName(loaded.name);
         setBirthDate(loaded.birthDate ? parseDateKey(loaded.birthDate) : null);
         setWeightKg(loaded.weightKg ?? '');
@@ -56,7 +57,11 @@ export default function EditChildScreen() {
 
     setSaving(true);
     try {
-      const base: ChildProfile = await loadChild();
+      const base: ChildProfile = (await loadChild()) ?? {
+        name: name.trim(),
+        shareCode: '',
+        members: [],
+      };
       await saveChild({
         ...base,
         name: name.trim(),
@@ -76,11 +81,7 @@ export default function EditChildScreen() {
   return (
     <View style={styles.screen}>
       <BackHeader title="Edytuj dziecko" />
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 40 }}
-      >
+      <KeyboardAwareForm contentContainerStyle={{ paddingBottom: 40 }}>
         <View style={styles.content}>
           <View style={styles.avatarSection}>
             <Pressable onPress={() => void handlePhotoPress()}>
@@ -137,7 +138,7 @@ export default function EditChildScreen() {
             onPress={() => void handleSave()}
           />
         </View>
-      </ScrollView>
+      </KeyboardAwareForm>
     </View>
   );
 }

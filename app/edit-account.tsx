@@ -1,12 +1,13 @@
 import { BackHeader } from '@/components/back-header';
 import { FormField } from '@/components/form-field';
+import KeyboardAwareForm from '@/components/KeyboardAwareForm';
 import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
 import { loadUser, saveUser } from '@/lib/storage';
 import type { UserAccount } from '@/lib/types';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 export default function EditAccountScreen() {
   const [name, setName] = useState('');
@@ -55,11 +56,7 @@ export default function EditAccountScreen() {
   return (
     <View style={styles.screen}>
       <BackHeader title="Moje konto" />
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 40 }}
-      >
+      <KeyboardAwareForm contentContainerStyle={{ paddingBottom: 40 }}>
         <View style={styles.content}>
           <View style={styles.providerCard}>
             <Text style={styles.providerIcon}>🔐</Text>
@@ -93,7 +90,7 @@ export default function EditAccountScreen() {
             onPress={() => void handleSave()}
           />
         </View>
-      </ScrollView>
+      </KeyboardAwareForm>
     </View>
   );
 }

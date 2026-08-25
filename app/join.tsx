@@ -4,22 +4,25 @@ import { FormField } from '@/components/form-field';
 import { FormHero } from '@/components/form-hero';
 import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
-import { addChildMember, loadChild } from '@/lib/storage';
-import type { Member } from '@/lib/types';
-import { router } from 'expo-router';
+import { useAppState } from '@/hooks/use-app-state';
+import { joinByCode } from '@/lib/storage';
+import { router, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 
 export default function JoinScreen() {
+  const { markJoined } = useAppState();
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
+  const [joining, setJoining] = useState(false);
 
   const join = async () => {
-    const child = await loadChild();
-    const typed = code.trim().toUpperCase();
+    if (joining) return;
+
+    const typedCode = code.trim();
     const memberName = name.trim();
 
-    if (!typed) {
+    if (!typedCode) {
       Alert.alert('Wpisz kod', 'Kod dziecka jest wymagany.');
       return;
     }
@@ -29,27 +32,25 @@ export default function JoinScreen() {
       return;
     }
 
-    if (typed !== child.shareCode.toUpperCase()) {
+    setJoining(true);
+    try {
+      const childName = await joinByCode(typedCode, memberName);
+      markJoined();
+
       Alert.alert(
-        'Nieznany kod',
-        'Sprawdź kod na ekranie Udostępnij u właściciela dziennika.'
+        'Dołączono!',
+        `${memberName} ma teraz dostęp do profilu ${childName}.`,
+        [{ text: 'OK', onPress: () => router.replace('/(tabs)' as Href) }]
       );
-      return;
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message === 'NIEZNANY_KOD'
+          ? 'Sprawdź kod na ekranie Udostępnij u właściciela dziennika.'
+          : 'Nie udało się połączyć. Sprawdź internet i spróbuj ponownie.';
+      Alert.alert('Błąd', message);
+    } finally {
+      setJoining(false);
     }
-
-    const member: Member = {
-      id: `member-${Date.now()}`,
-      name: memberName,
-      role: 'member',
-    };
-
-    await addChildMember(member);
-
-    Alert.alert(
-      'Dołączono!',
-      `${member.name} ma teraz dostęp do profilu ${child.name}.`,
-      [{ text: 'OK', onPress: () => router.back() }]
-    );
   };
 
   return (
@@ -60,7 +61,7 @@ export default function JoinScreen() {
           <FormHero icon="🤝" />
 
           <FormField
-            label="Twój kod"
+            label="Twoje imię"
             value={name}
             onChangeText={setName}
             placeholder="np. Tomek"
@@ -80,7 +81,10 @@ export default function JoinScreen() {
             dziecko
           </Text>
 
-          <PrimaryButton label="DOŁĄCZ" onPress={() => void join()} />
+          <PrimaryButton
+            label={joining ? 'Dołączanie...' : 'DOŁĄCZ'}
+            onPress={() => void join()}
+          />
         </View>
       </KeyboardAwareForm>
     </View>
