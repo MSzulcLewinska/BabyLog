@@ -37,12 +37,12 @@ function RootNavigator() {
   useEffect(() => {
     if (!ready) return;
 
-    const current = segments[0];
+    const current = segments[0] as string;
     const onAuthScreen =
-      current === 'login' || current === 'setup-child' || current === 'join';
+      current === 'login' || current === 'login-email' || current === 'setup-child' || current === 'join';
 
     if (!signedIn) {
-      if (current !== 'login' && current !== 'join') {
+      if (current !== 'login' && current !== 'login-email' && current !== 'join') {
         router.replace('/login' as Href);
       }
       return;
@@ -72,6 +72,7 @@ function RootNavigator() {
       >
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="login-email" />
         <Stack.Screen name="setup-child" />
         <Stack.Screen name="activities" />
         <Stack.Screen name="day" />

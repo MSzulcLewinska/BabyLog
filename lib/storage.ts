@@ -648,6 +648,62 @@ export async function findChildByEmail(
   };
 }
 
+export async function loginByEmail(
+  email: string
+): Promise<{
+  childId: string;
+  childName: string;
+  shareCode: string;
+  deviceId: string;
+  secret: string;
+  role: string;
+  memberName: string;
+} | null> {
+  if (!isSupabaseConfigured() || !email.trim()) {
+    return null;
+  }
+
+  const { data, error } = await getSupabase(null).rpc('login_by_email', {
+    p_email: email.trim(),
+  });
+
+  if (error || !data) {
+    return null;
+  }
+
+  const result = Array.isArray(data) ? data[0] : data;
+  if (!result?.out_child_id) {
+    return null;
+  }
+
+  return {
+    childId: result.out_child_id,
+    childName: result.out_child_name,
+    shareCode: result.out_share_code,
+    deviceId: result.out_member_id,
+    secret: result.out_secret,
+    role: result.out_role,
+    memberName: result.out_member_name,
+  };
+}
+
+export async function updateMemberRole(
+  memberId: string,
+  newRole: 'member' | 'observer'
+): Promise<void> {
+  const session = await requireSession();
+  const { error } = await clientFor(session).rpc('update_member_role', {
+    p_member_id: memberId,
+    p_new_role: newRole,
+  });
+
+  if (error) {
+    throw new Error(error.message === 'BRAK_UPRAWNIEN' ? 'Brak uprawnień właściciela.' : error.message);
+  }
+
+  notifyDataChanged();
+}
+
 // ---------- Tworzenie dziecka / dołączanie / migracja ----------
 
 async function seedActivities(childId: string, activities: Activity[]) {
@@ -794,7 +850,8 @@ export async function createChildWithOwner(
 
 export async function joinByCode(
   code: string,
-  memberName: string
+  memberName: string,
+  email?: string
 ): Promise<string> {
   if (!isSupabaseConfigured()) {
     throw new Error('Supabase nie jest skonfigurowany.');
@@ -803,6 +860,7 @@ export async function joinByCode(
   const { data, error } = await getSupabase(null).rpc('join_by_code', {
     p_code: code.trim(),
     p_name: memberName.trim(),
+    p_email: email?.trim() || null,
   });
 
   if (error) {

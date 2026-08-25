@@ -2,7 +2,12 @@ import { Palette } from '@/constants/theme';
 import { useAppState } from '@/hooks/use-app-state';
 import { useLiveData } from '@/hooks/use-live-data';
 import { formatChildAge } from '@/lib/dates';
-import { loadChild, loadUser, removeChildMember } from '@/lib/storage';
+import {
+  loadChild,
+  loadUser,
+  removeChildMember,
+  updateMemberRole,
+} from '@/lib/storage';
 import type { Member } from '@/lib/types';
 import { router, type Href } from 'expo-router';
 import { useState } from 'react';
@@ -56,6 +61,27 @@ export default function SettingsScreen() {
           },
         },
         { text: 'Anuluj', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleToggleRole = (member: Member) => {
+    const isObserver = member.role === 'observer';
+    const newRole = isObserver ? 'member' : 'observer';
+    const label = isObserver ? 'Opiekun' : 'Obserwator';
+    Alert.alert(
+      'Zmień rolę',
+      `Zmienić rolę „${member.name}" na ${label}?`,
+      [
+        { text: 'Anuluj', style: 'cancel' },
+        {
+          text: label,
+          onPress: () => {
+            void updateMemberRole(member.id, newRole).catch(() => {
+              Alert.alert('Błąd', 'Nie udało się zmienić roli.');
+            });
+          },
+        },
       ]
     );
   };
@@ -118,15 +144,25 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionLabel}>Członkowie</Text>
         <View style={styles.card}>
-          {(child?.members ?? []).map((member, index) => (
-            <MemberRow
-              key={member.id}
-              member={member}
-              last={index === (child?.members.length ?? 0) - 1}
-              busy={removingId === member.id}
-              onRemove={() => handleRemoveMember(member)}
-            />
-          ))}
+          {(child?.members ?? []).map((member, index) => {
+            const isOwner = member.role === 'owner';
+            return isOwner ? (
+              <MemberRowOwner
+                key={member.id}
+                member={member}
+                last={index === (child?.members.length ?? 0) - 1}
+              />
+            ) : (
+              <MemberRow
+                key={member.id}
+                member={member}
+                last={index === (child?.members.length ?? 0) - 1}
+                busy={removingId === member.id}
+                onRemove={() => handleRemoveMember(member)}
+                onToggleRole={() => handleToggleRole(member)}
+              />
+            );
+          })}
         </View>
 
         <Text style={styles.sectionLabel}>Udostępnianie</Text>
@@ -176,18 +212,41 @@ function SettingsRow({
   );
 }
 
+function MemberRowOwner({
+  member,
+  last,
+}: {
+  member: Member;
+  last?: boolean;
+}) {
+  return (
+    <View style={[styles.row, last && styles.lastRow]}>
+      <View style={styles.memberAvatar}>
+        <Text style={styles.memberInitial}>
+          {member.name.charAt(0).toUpperCase()}
+        </Text>
+      </View>
+      <View style={styles.rowTexts}>
+        <Text style={styles.rowLabel}>{member.name}</Text>
+        <Text style={styles.rowSub}>Właściciel</Text>
+      </View>
+    </View>
+  );
+}
+
 function MemberRow({
   member,
   last,
   busy,
   onRemove,
+  onToggleRole,
 }: {
   member: Member;
   last?: boolean;
   busy?: boolean;
   onRemove: () => void;
+  onToggleRole: () => void;
 }) {
-  const isOwner = member.role === 'owner';
   const isObserver = member.role === 'observer';
 
   return (
@@ -200,16 +259,23 @@ function MemberRow({
       <View style={styles.rowTexts}>
         <Text style={styles.rowLabel}>{member.name}</Text>
         <Text style={styles.rowSub}>
-          {isOwner ? 'Właściciel' : isObserver ? 'Obserwator (podgląd)' : 'Opiekun'}
+          {isObserver ? 'Obserwator (podgląd)' : 'Opiekun'}
         </Text>
       </View>
-      {!isOwner && (
-        <Pressable hitSlop={10} onPress={onRemove} disabled={busy}>
-          <Text style={[styles.removeIcon, busy && styles.removeIconBusy]}>
-            🗑️
-          </Text>
-        </Pressable>
-      )}
+      <Pressable
+        hitSlop={10}
+        onPress={onToggleRole}
+        style={styles.roleButton}
+      >
+        <Text style={styles.roleButtonText}>
+          {isObserver ? '👤' : '👁️'}
+        </Text>
+      </Pressable>
+      <Pressable hitSlop={10} onPress={onRemove} disabled={busy}>
+        <Text style={[styles.removeIcon, busy && styles.removeIconBusy]}>
+          🗑️
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -327,6 +393,14 @@ const styles = StyleSheet.create({
   },
   removeIconBusy: {
     opacity: 0.3,
+  },
+  roleButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+  },
+  roleButtonText: {
+    fontSize: 16,
   },
   chevron: {
     fontSize: 22,

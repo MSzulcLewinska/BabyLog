@@ -58,6 +58,14 @@ export default function LoginScreen() {
           )}
         </Pressable>
 
+        <Text style={styles.joinHint}>Masz już konto?</Text>
+        <Pressable
+          style={({ pressed }) => [styles.joinButton, pressed && { opacity: 0.7 }]}
+          onPress={() => router.push('/login-email' as Href)}
+        >
+          <Text style={styles.joinLabel}>Zaloguj się mailem →</Text>
+        </Pressable>
+
         <Text style={styles.joinHint}>Druga osoba z rodziny?</Text>
         <Pressable
           style={({ pressed }) => [styles.joinButton, pressed && { opacity: 0.7 }]}

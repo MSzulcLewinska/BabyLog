@@ -30,6 +30,7 @@ export type Member = {
   id: string;
   name: string;
   role: 'owner' | 'member' | 'observer';
+  email?: string;
 };
 
 export type ChildProfile = {

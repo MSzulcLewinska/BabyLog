@@ -21,6 +21,7 @@ create table if not exists public.members (
   child_id uuid not null references public.children (id) on delete cascade,
   name text not null,
   role text not null default 'member' check (role in ('owner', 'member', 'observer')),
+  email text,
   owner_email text,
   secret uuid not null default gen_random_uuid(),
   created_at timestamptz not null default now()
@@ -301,7 +302,7 @@ grant execute on function public.create_child_with_owner (text, text, text, text
 
 -- ---------- Dołączanie przez kod ----------
 
-create or replace function public.join_by_code (p_code text, p_name text)
+create or replace function public.join_by_code (p_code text, p_name text, p_email text default null)
 returns table (
   out_child_id uuid,
   out_child_name text,
@@ -318,14 +319,14 @@ declare
 begin
   select * into v_child
   from public.children c
-  where upper(replace(c.share_code, ' ', '')) = upper(replace(trim(p_code), ' ', ''));
+  where upper(replace(c.share_code, ' ', '')) = upper(replace(trim(p_code), ' '));
 
   if not found then
     raise exception 'NIEZNANY_KOD';
   end if;
 
-  insert into public.members (child_id, name, role)
-  values (v_child.id, trim(p_name), 'member')
+  insert into public.members (child_id, name, role, email)
+  values (v_child.id, trim(p_name), 'member', nullif(trim(p_email), ''))
   returning * into v_member;
 
   return query
@@ -333,8 +334,8 @@ begin
 end;
 $$;
 
-revoke all on function public.join_by_code (text, text) from public;
-grant execute on function public.join_by_code (text, text) to anon, authenticated;
+revoke all on function public.join_by_code (text, text, text) from public;
+grant execute on function public.join_by_code (text, text, text) to anon, authenticated;
 
 -- ---------- Przywracanie konta po wylogowaniu ----------
 -- Pozwala zalogować się ponownie na urządzeniu, które już wcześniej miało
@@ -460,3 +461,82 @@ $$;
 
 revoke all on function public.get_other_member_tokens (uuid, uuid) from public;
 grant execute on function public.get_other_member_tokens (uuid, uuid) to anon, authenticated;
+
+-- ---------- Logowanie mailem ----------
+-- Każdy członek (owner, member, observer) może zalogować się na innym urządzeniu
+-- wpisując e-mail podany przy dołączaniu.
+
+create or replace function public.login_by_email (p_email text)
+returns table (
+  out_child_id uuid,
+  out_child_name text,
+  out_share_code text,
+  out_member_id uuid,
+  out_secret uuid,
+  out_role text,
+  out_member_name text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    c.id, c.name, c.share_code, m.id, m.secret, m.role, m.name
+  from public.members m
+  join public.children c on c.id = m.child_id
+  where lower(m.email) = lower(trim(p_email))
+    and m.email is not null
+    and m.email != ''
+  order by m.created_at desc
+  limit 1;
+$$;
+
+revoke all on function public.login_by_email (text) from public;
+grant execute on function public.login_by_email (text) to anon, authenticated;
+
+-- ---------- Zmiana roli (owner → member/observer) ----------
+
+create or replace function public.update_member_role (
+  p_member_id uuid,
+  p_new_role text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_child_id uuid;
+begin
+  -- sprawdź czy bieżący device jest ownerem
+  select m.child_id into v_child_id
+  from public.members m
+  where m.id::text = coalesce(
+    current_setting('request.headers', true)::json ->> 'x-member-id', ''
+  )
+  and m.secret::text = coalesce(
+    current_setting('request.headers', true)::json ->> 'x-member-secret', ''
+  )
+  and m.role = 'owner';
+
+  if v_child_id is null then
+    raise exception 'BRAK_UPRAWNIEN';
+  end if;
+
+  -- nie można zmienić roli właścicielowi
+  if exists (
+    select 1 from public.members m
+    where m.id = p_member_id and m.role = 'owner'
+  ) then
+    raise exception 'NIE_MOZNA_ZMIENIC_OWNERA';
+  end if;
+
+  update public.members m
+  set role = p_new_role
+  where m.id = p_member_id
+    and m.child_id = v_child_id;
+end;
+$$;
+
+revoke all on function public.update_member_role (uuid, text) from public;
+grant execute on function public.update_member_role (uuid, text) to anon, authenticated;

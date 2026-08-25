@@ -8,6 +8,7 @@ import {
   hasSavedChild,
   loadPlans,
   loadUser,
+  loginByEmail,
   migrateLocalToCloud,
   saveUser,
   signOut as storageSignOut,
@@ -30,6 +31,7 @@ type AppStateValue = {
   signedIn: boolean;
   onboarded: boolean;
   signIn: (user?: Partial<UserAccount>) => Promise<void>;
+  loginWithEmail: (email: string) => Promise<void>;
   completeSetup: (name: string, photoUri?: string) => Promise<void>;
   markJoined: () => void;
   signOut: () => Promise<void>;
@@ -156,6 +158,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [userName]
   );
 
+  const loginWithEmail = useCallback(async (email: string) => {
+    const result = await loginByEmail(email.trim());
+    if (!result) {
+      throw new Error('Nie znaleziono konta z tym adresem e-mail. Sprawdź adres lub dołącz kodem.');
+    }
+
+    await saveSession({
+      childId: result.childId,
+      deviceId: result.deviceId,
+      secret: result.secret,
+    });
+
+    const account: UserAccount = {
+      id: `email-${Date.now()}`,
+      provider: 'email',
+      email: email.trim(),
+      name: result.memberName,
+      signedInAt: new Date().toISOString(),
+    };
+    await saveUser(account);
+    setUserName(result.memberName);
+    setSignedIn(true);
+    setOnboarded(true);
+    void registerPushToken();
+  }, []);
+
   const markJoined = useCallback(() => {
     setSignedIn(true);
     setOnboarded(true);
@@ -169,8 +197,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ready, signedIn, onboarded, signIn, completeSetup, markJoined, signOut }),
-    [ready, signedIn, onboarded, signIn, completeSetup, markJoined, signOut]
+    () => ({ ready, signedIn, onboarded, signIn, loginWithEmail, completeSetup, markJoined, signOut }),
+    [ready, signedIn, onboarded, signIn, loginWithEmail, completeSetup, markJoined, signOut]
   );
 
   return (
