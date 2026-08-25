@@ -1,6 +1,6 @@
 import {
   registerPushToken,
-  schedulePlanLocalNotification,
+  syncPlanNotifications,
 } from '@/lib/notifications';
 import {
   createChildWithOwner,
@@ -69,11 +69,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               void (async () => {
                 try {
                   const plans = await loadPlans();
-                  for (const plan of plans) {
-                    if (!plan.notificationId) {
-                      void schedulePlanLocalNotification(plan);
-                    }
-                  }
+                  await syncPlanNotifications(plans);
                 } catch {
                   // cicho
                 }

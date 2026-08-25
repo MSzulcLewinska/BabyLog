@@ -11,7 +11,7 @@ const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
 
 // Picker zwraca plik w folderze cache, który system może w każdej chwili
 // wyczyścić — kopiujemy do trwałego folderu dokumentów aplikacji.
-function persistImage(sourceUri: string): string {
+async function persistImage(sourceUri: string): Promise<string> {
   try {
     const source = new File(sourceUri);
     if (!source.exists) {
@@ -22,7 +22,7 @@ function persistImage(sourceUri: string): string {
     dir.create({ idempotent: true, intermediates: true });
 
     const dest = new File(dir, `child-${Date.now()}.jpg`);
-    source.copy(dest);
+    await source.copy(dest);
     return dest.uri;
   } catch {
     return sourceUri;

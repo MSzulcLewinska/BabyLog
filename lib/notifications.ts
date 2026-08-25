@@ -12,14 +12,35 @@ export async function registerPushToken(): Promise<void> {
     const session = await loadSession();
     if (!session) return;
 
-    const { status } = await Notifications.getPermissionsAsync();
-    if (status !== 'granted') return;
+    // Na Androidie utwórz kanał powiadomień przed proszeniem o uprawnienia
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Powiadomienia',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#34C759',
+      });
+    }
+
+    // Proś o uprawnienia (nie tylko sprawdzaj!)
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') return;
+
+    const projectId =
+      (globalThis as Record<string, unknown>).__EXPO_CONSTANTS_PROJECT_ID__ as string | undefined;
 
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: 'fe168d73-bfda-44d0-a102-98422e2c4c65',
+      projectId: projectId ?? 'fe168d73-bfda-44d0-a102-98422e2c4c65',
     });
 
     const token = tokenData.data;
+
+    if (!token) return;
 
     const db = getSupabase(session);
 
@@ -30,14 +51,18 @@ export async function registerPushToken(): Promise<void> {
       .eq('member_id', session.deviceId)
       .eq('platform', Platform.OS);
 
-    await db.from('push_tokens').insert({
+    const { error } = await db.from('push_tokens').insert({
       child_id: session.childId,
       member_id: session.deviceId,
       token,
       platform: Platform.OS,
     });
-  } catch {
-    // cicho — push nie jest krytyczny
+
+    if (error) {
+      console.warn('[push] błąd zapisu tokena:', error.message);
+    }
+  } catch (e) {
+    console.warn('[push] registerPushToken error:', e);
   }
 }
 
@@ -143,4 +168,31 @@ export async function schedulePlanLocalNotification(
       channelId: Platform.OS === 'android' ? 'reminders' : undefined,
     },
   });
+}
+
+export async function syncPlanNotifications(
+  plans: Plan[]
+): Promise<string | null> {
+  let updatedPlanId: string | null = null;
+
+  for (const plan of plans) {
+    if (plan.notificationId) continue;
+
+    const notifId = await schedulePlanLocalNotification(plan);
+    if (notifId) {
+      updatedPlanId = plan.id;
+
+      const session = await loadSession();
+      if (session) {
+        const db = getSupabase(session);
+        await db
+          .from('plans')
+          .update({ notification_id: notifId })
+          .eq('id', plan.id)
+          .eq('child_id', session.childId);
+      }
+    }
+  }
+
+  return updatedPlanId;
 }

@@ -2,10 +2,11 @@ import { EventTimeline } from '@/components/event-timeline';
 import { Palette } from '@/constants/theme';
 import { useLiveData } from '@/hooks/use-live-data';
 import { formatLongDate, toDateKey } from '@/lib/dates';
+import { syncPlanNotifications } from '@/lib/notifications';
 import { describeReminder } from '@/lib/reminders';
 import { loadChild, loadEvents, loadPlans } from '@/lib/storage';
 import { router, type Href } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Image } from 'expo-image';
 import {
   Pressable,
@@ -21,6 +22,12 @@ export default function HomeScreen() {
   const events = useLiveData(loadEvents);
   const child = useLiveData(loadChild);
   const livePlans = useLiveData(loadPlans);
+
+  useEffect(() => {
+    if (livePlans && livePlans.length > 0) {
+      void syncPlanNotifications(livePlans);
+    }
+  }, [livePlans]);
 
   const now = useMemo(() => new Date(), []);
   const todayKey = toDateKey(now);
