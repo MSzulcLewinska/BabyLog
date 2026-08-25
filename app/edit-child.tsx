@@ -64,11 +64,17 @@ export default function EditChildScreen() {
 
       let finalPhotoUri = photoUri ?? base.photoUri;
 
-      if (photoUri && photoUri !== base.photoUri) {
+      const needsUpload =
+        photoUri &&
+        (photoUri !== base.photoUri || photoUri.startsWith('file://'));
+
+      if (needsUpload) {
         const publicUrl = await uploadChildPhoto(photoUri);
         if (publicUrl) {
           finalPhotoUri = publicUrl;
           setPhotoUri(publicUrl);
+        } else {
+          finalPhotoUri = undefined;
         }
       }
 

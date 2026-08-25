@@ -27,6 +27,7 @@ const USER_KEY = 'babylog_user';
 const PLANS_KEY = 'babylog_plans';
 const LEGACY_FEEDINGS_KEY = 'feedings';
 const MIGRATED_KEY = 'babylog_cloud_migrated';
+const PLAN_NOTIFS_KEY = 'babylog_plan_notifs';
 
 export const DEFAULT_ACTIVITIES: Activity[] = [
   { id: 'milk', name: 'Mleko', icon: '🍼', unit: 'ml', color: '#34C759', builtin: true, kind: 'milk' },
@@ -41,6 +42,16 @@ export const DEFAULT_ACTIVITIES: Activity[] = [
 
 export function newId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export async function getLocalNotifId(planId: string): Promise<string | null> {
+  const map = await readCache<Record<string, string>>(PLAN_NOTIFS_KEY, {});
+  return map[planId] ?? null;
+}
+
+export async function setLocalNotifId(planId: string, notifId: string): Promise<void> {
+  const map = await readCache<Record<string, string>>(PLAN_NOTIFS_KEY, {});
+  await writeCache(PLAN_NOTIFS_KEY, { ...map, [planId]: notifId });
 }
 
 function generateShareCode(name: string): string {
@@ -221,7 +232,7 @@ function rowToPlan(row: PlanRow): Plan {
     minutesBefore: row.minutes_before ?? undefined,
     reminderTime: row.reminder_time ?? undefined,
     reminderNote: row.reminder_note ?? undefined,
-    notificationId: row.notification_id ?? undefined,
+    notificationId: undefined,
   };
 }
 
@@ -272,7 +283,7 @@ function planToRow(plan: Plan, childId: string): PlanRow {
     minutes_before: plan.minutesBefore ?? null,
     reminder_time: plan.reminderTime ?? null,
     reminder_note: plan.reminderNote ?? null,
-    notification_id: plan.notificationId ?? null,
+    notification_id: null,
   };
 }
 
@@ -416,7 +427,10 @@ export async function loadChild(): Promise<ChildProfile | null> {
       name: row.name,
       shareCode: row.share_code,
       members,
-      photoUri: row.photo_uri ?? undefined,
+      photoUri:
+        row.photo_uri && !row.photo_uri.startsWith('file://')
+          ? row.photo_uri
+          : undefined,
       birthDate: row.birth_date ?? undefined,
       weightKg: row.weight_kg != null ? String(row.weight_kg) : undefined,
       heightCm: row.height_cm != null ? String(row.height_cm) : undefined,
@@ -450,7 +464,9 @@ export async function saveChild(child: ChildProfile): Promise<void> {
       .from('children')
       .update({
         name: child.name,
-        photo_uri: child.photoUri ?? null,
+        photo_uri: child.photoUri?.startsWith('file://')
+          ? null
+          : child.photoUri ?? null,
         birth_date: child.birthDate ?? null,
         weight_kg: child.weightKg != null ? Number(child.weightKg) : null,
         height_cm: child.heightCm != null ? Number(child.heightCm) : null,
@@ -733,7 +749,8 @@ async function uploadPhotoToStorage(
       return null;
     }
 
-    const bytes = await file.bytes();
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
     const path = `${childId}/${Date.now()}.jpg`;
 
     const db = getSupabase(session ?? (await loadSession()));
@@ -742,11 +759,13 @@ async function uploadPhotoToStorage(
       .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
 
     if (error) {
+      console.warn('[photo] upload error:', error.message);
       return null;
     }
 
     return db.storage.from('photos').getPublicUrl(path).data.publicUrl;
-  } catch {
+  } catch (e) {
+    console.warn('[photo] upload exception:', e);
     return null;
   }
 }
@@ -787,7 +806,7 @@ export async function createChildWithOwner(
       p_share_code: generateShareCode(childName),
       p_owner_name: ownerName.trim() || 'Właściciel',
       p_owner_email: ownerEmail ?? null,
-      p_photo_uri: photoUri ?? null,
+      p_photo_uri: photoUri?.startsWith('file://') ? null : photoUri ?? null,
     });
 
     if (error) {

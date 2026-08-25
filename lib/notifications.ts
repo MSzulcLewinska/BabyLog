@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 
 import { getSupabase, loadSession } from '@/lib/supabase';
 import { parseDateKey } from '@/lib/dates';
+import { getLocalNotifId, setLocalNotifId } from '@/lib/storage';
 import type { Plan } from '@/lib/types';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
@@ -12,13 +13,19 @@ export async function registerPushToken(): Promise<void> {
     const session = await loadSession();
     if (!session) return;
 
-    // Na Androidie utwórz kanał powiadomień przed proszeniem o uprawnienia
+    // Na Androidie utwórz kanały powiadomień przed proszeniem o uprawnienia
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Powiadomienia',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#34C759',
+      });
+      await Notifications.setNotificationChannelAsync('reminders', {
+        name: 'Przypomnienia',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#F59E0B',
       });
     }
 
@@ -176,21 +183,13 @@ export async function syncPlanNotifications(
   let updatedPlanId: string | null = null;
 
   for (const plan of plans) {
-    if (plan.notificationId) continue;
+    const existingLocalId = await getLocalNotifId(plan.id);
+    if (existingLocalId) continue;
 
     const notifId = await schedulePlanLocalNotification(plan);
     if (notifId) {
       updatedPlanId = plan.id;
-
-      const session = await loadSession();
-      if (session) {
-        const db = getSupabase(session);
-        await db
-          .from('plans')
-          .update({ notification_id: notifId })
-          .eq('id', plan.id)
-          .eq('child_id', session.childId);
-      }
+      await setLocalNotifId(plan.id, notifId);
     }
   }
 

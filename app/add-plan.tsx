@@ -12,7 +12,7 @@ import {
   reminderDate,
   schedulePlanReminder,
 } from '@/lib/reminders';
-import { addPlan, loadActivities, newId } from '@/lib/storage';
+import { addPlan, loadActivities, newId, setLocalNotifId } from '@/lib/storage';
 import type { Activity, Plan, ReminderKind } from '@/lib/types';
 import { loadSession } from '@/lib/supabase';
 import { notifyOtherMembers } from '@/lib/notifications';
@@ -98,12 +98,14 @@ export default function AddPlanScreen() {
       if (!granted) return;
 
       const notificationId = await schedulePlanReminder(plan);
-      const planWithNotif = { ...plan, notificationId: notificationId ?? undefined };
-      await addPlan(planWithNotif);
+      if (notificationId) {
+        await setLocalNotifId(plan.id, notificationId);
+      }
+      await addPlan(plan);
 
       const session = await loadSession();
       if (session) {
-        void notifyOtherMembers(planWithNotif, session.deviceId);
+        void notifyOtherMembers(plan, session.deviceId);
       }
 
       Alert.alert(
