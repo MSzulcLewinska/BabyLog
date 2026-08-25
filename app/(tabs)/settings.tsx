@@ -1,4 +1,5 @@
 import { Palette } from '@/constants/theme';
+import { useAppState } from '@/hooks/use-app-state';
 import { useLiveData } from '@/hooks/use-live-data';
 import { formatChildAge } from '@/lib/dates';
 import { loadChild, loadUser, removeChildMember } from '@/lib/storage';
@@ -20,10 +21,26 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const child = useLiveData(loadChild);
   const user = useLiveData(loadUser);
+  const { signOut } = useAppState();
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   const accountLabel =
     user?.name || user?.email || 'Uzupełnij dane konta';
+
+  const handleSignOut = () => {
+    Alert.alert(
+      'Wylogowanie',
+      'Wylogować to urządzenie? Dane dziecka pozostaną bezpieczne w chmurze.',
+      [
+        { text: 'Anuluj', style: 'cancel' },
+        {
+          text: 'Wyloguj',
+          style: 'destructive',
+          onPress: () => void signOut(),
+        },
+      ]
+    );
+  };
 
   const handleRemoveMember = (member: Member) => {
     Alert.alert(
@@ -90,6 +107,11 @@ export default function SettingsScreen() {
             label={accountLabel}
             sub="Zalogowano przez Google"
             onPress={() => router.push('/edit-account' as Href)}
+          />
+          <SettingsRow
+            icon="🚪"
+            label="Wyloguj się"
+            onPress={handleSignOut}
             last
           />
         </View>
@@ -166,6 +188,7 @@ function MemberRow({
   onRemove: () => void;
 }) {
   const isOwner = member.role === 'owner';
+  const isObserver = member.role === 'observer';
 
   return (
     <View style={[styles.row, last && styles.lastRow]}>
@@ -177,7 +200,7 @@ function MemberRow({
       <View style={styles.rowTexts}>
         <Text style={styles.rowLabel}>{member.name}</Text>
         <Text style={styles.rowSub}>
-          {isOwner ? 'Właściciel' : 'Ma dostęp do zapisu'}
+          {isOwner ? 'Właściciel' : isObserver ? 'Obserwator (podgląd)' : 'Opiekun'}
         </Text>
       </View>
       {!isOwner && (

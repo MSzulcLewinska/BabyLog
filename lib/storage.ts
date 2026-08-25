@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File } from 'expo-file-system';
 
 import { notifyDataChanged } from '@/lib/bus';
 import { toDateKey } from '@/lib/dates';
@@ -611,6 +612,42 @@ export async function saveUser(user: UserAccount): Promise<void> {
   notifyDataChanged();
 }
 
+export async function signOut(): Promise<void> {
+  // Wylogowanie oznacza only rozłączenie konta Google — sesja urządzeniowa
+  // (dane dziecka, wydarzenia, plany) zostaje zachowana.
+  await AsyncStorage.removeItem(USER_KEY);
+  notifyDataChanged();
+}
+
+export async function findChildByEmail(
+  email: string
+): Promise<{ childId: string; childName: string; shareCode: string; deviceId: string; secret: string } | null> {
+  if (!isSupabaseConfigured() || !email.trim()) {
+    return null;
+  }
+
+  const { data, error } = await getSupabase(null).rpc('find_child_by_owner_email', {
+    p_email: email.trim(),
+  });
+
+  if (error || !data) {
+    return null;
+  }
+
+  const result = Array.isArray(data) ? data[0] : data;
+  if (!result?.out_child_id) {
+    return null;
+  }
+
+  return {
+    childId: result.out_child_id,
+    childName: result.out_child_name,
+    shareCode: result.out_share_code,
+    deviceId: result.out_member_id,
+    secret: result.out_secret,
+  };
+}
+
 // ---------- Tworzenie dziecka / dołączanie / migracja ----------
 
 async function seedActivities(childId: string, activities: Activity[]) {
@@ -625,10 +662,52 @@ async function seedActivities(childId: string, activities: Activity[]) {
   }
 }
 
+async function uploadPhotoToStorage(
+  session: DeviceSession | null,
+  childId: string,
+  localUri: string
+): Promise<string | null> {
+  try {
+    if (!isSupabaseConfigured()) {
+      return null;
+    }
+
+    const file = new File(localUri);
+    if (!file.exists) {
+      return null;
+    }
+
+    const bytes = await file.bytes();
+    const path = `${childId}/${Date.now()}.jpg`;
+
+    const db = getSupabase(session ?? (await loadSession()));
+    const { error } = await db.storage
+      .from('photos')
+      .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
+
+    if (error) {
+      return null;
+    }
+
+    return db.storage.from('photos').getPublicUrl(path).data.publicUrl;
+  } catch {
+    return null;
+  }
+}
+
+export async function uploadChildPhoto(localUri: string): Promise<string | null> {
+  const session = await loadSession();
+  if (!session) {
+    return null;
+  }
+  return uploadPhotoToStorage(session, session.childId, localUri);
+}
+
 export async function createChildWithOwner(
   childName: string,
   photoUri: string | undefined,
-  ownerName: string
+  ownerName: string,
+  ownerEmail?: string,
 ): Promise<ChildProfile> {
   if (!isSupabaseConfigured()) {
     throw new Error('Supabase nie jest skonfigurowany.');
@@ -651,6 +730,7 @@ export async function createChildWithOwner(
       p_child_name: childName.trim(),
       p_share_code: generateShareCode(childName),
       p_owner_name: ownerName.trim() || 'Właściciel',
+      p_owner_email: ownerEmail ?? null,
       p_photo_uri: photoUri ?? null,
     });
 
@@ -670,19 +750,37 @@ export async function createChildWithOwner(
 
   const ownerDisplayName = ownerName.trim() || 'Właściciel';
 
-  await saveSession({
+  const deviceSession: DeviceSession = {
     childId: result.out_child_id,
     deviceId: result.out_member_id,
     secret: result.out_secret,
-  });
+  };
+  await saveSession(deviceSession);
 
   await seedActivities(result.out_child_id, DEFAULT_ACTIVITIES);
+
+  let finalPhotoUri = photoUri;
+
+  if (photoUri) {
+    const publicUrl = await uploadPhotoToStorage(
+      deviceSession,
+      result.out_child_id,
+      photoUri
+    );
+    if (publicUrl) {
+      finalPhotoUri = publicUrl;
+      await getSupabase(deviceSession)
+        .from('children')
+        .update({ photo_uri: publicUrl })
+        .eq('id', result.out_child_id);
+    }
+  }
 
   const profile: ChildProfile = {
     name: result.out_child_name,
     shareCode: result.out_share_code,
     members: [{ id: result.out_member_id, name: ownerDisplayName, role: 'owner' }],
-    photoUri: photoUri,
+    photoUri: finalPhotoUri,
   };
 
   await writeCache(CHILD_KEY, profile);
@@ -725,12 +823,15 @@ export async function joinByCode(
 
   notifyDataChanged();
 
+  const { registerPushToken } = await import('@/lib/notifications');
+  void registerPushToken();
+
   await Promise.all([loadChild(), loadActivities(), loadEvents(), loadPlans()]);
 
   return result.out_child_name as string;
 }
 
-export async function migrateLocalToCloud(ownerFallback: string): Promise<boolean> {
+export async function migrateLocalToCloud(ownerFallback: string, ownerEmail?: string): Promise<boolean> {
   const migrated = await AsyncStorage.getItem(MIGRATED_KEY);
 
   if (migrated || !isSupabaseConfigured()) {
@@ -798,6 +899,7 @@ export async function migrateLocalToCloud(ownerFallback: string): Promise<boolea
         p_child_name: localChild?.name?.trim() || 'Dziecko',
         p_share_code: generateShareCode(localChild?.name || 'Baby'),
         p_owner_name: ownerName,
+        p_owner_email: ownerEmail ?? null,
         p_photo_uri: localChild?.photoUri ?? null,
         p_birth_date: localChild?.birthDate ?? null,
         p_weight_kg:

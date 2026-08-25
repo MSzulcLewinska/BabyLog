@@ -22,7 +22,7 @@ export default function LoginScreen() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 700));
       await signIn();
-      router.replace('/setup-child' as Href);
+      // Nawigacją zajmuje się _layout.tsx na podstawie stanu signedIn/onboarded
     } finally {
       setBusy(false);
     }

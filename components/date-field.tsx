@@ -8,9 +8,17 @@ type DateFieldProps = {
   value: Date | null;
   onChange: (date: Date) => void;
   label?: string;
+  maximumDate?: Date;
+  minimumDate?: Date;
 };
 
-export function DateField({ value, onChange, label = 'Data urodzenia' }: DateFieldProps) {
+export function DateField({
+  value,
+  onChange,
+  label = 'Data urodzenia',
+  maximumDate,
+  minimumDate,
+}: DateFieldProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -29,7 +37,8 @@ export function DateField({ value, onChange, label = 'Data urodzenia' }: DateFie
             value={value ?? new Date()}
             mode="date"
             display="spinner"
-            maximumDate={new Date()}
+            maximumDate={maximumDate ?? new Date()}
+            minimumDate={minimumDate}
             onChange={(_, selected) => {
               if (Platform.OS === 'android') {
                 setOpen(false);

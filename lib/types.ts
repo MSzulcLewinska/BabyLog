@@ -29,7 +29,7 @@ export type Activity = {
 export type Member = {
   id: string;
   name: string;
-  role: 'owner' | 'member';
+  role: 'owner' | 'member' | 'observer';
 };
 
 export type ChildProfile = {

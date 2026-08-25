@@ -14,6 +14,8 @@ import {
 } from '@/lib/reminders';
 import { addPlan, loadActivities, newId } from '@/lib/storage';
 import type { Activity, Plan, ReminderKind } from '@/lib/types';
+import { loadSession } from '@/lib/supabase';
+import { notifyOtherMembers } from '@/lib/notifications';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -96,7 +98,13 @@ export default function AddPlanScreen() {
       if (!granted) return;
 
       const notificationId = await schedulePlanReminder(plan);
-      await addPlan({ ...plan, notificationId: notificationId ?? undefined });
+      const planWithNotif = { ...plan, notificationId: notificationId ?? undefined };
+      await addPlan(planWithNotif);
+
+      const session = await loadSession();
+      if (session) {
+        void notifyOtherMembers(planWithNotif, session.deviceId);
+      }
 
       Alert.alert(
         'Zaplanowano',
@@ -149,7 +157,12 @@ export default function AddPlanScreen() {
             })}
           </ScrollView>
 
-          <DateField label="Data" value={date} onChange={setDate} />
+          <DateField
+            label="Data"
+            value={date}
+            onChange={setDate}
+            minimumDate={new Date()}
+          />
 
           <TimeField value={time} onChange={setTime} />
 

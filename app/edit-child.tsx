@@ -6,7 +6,7 @@ import { Palette } from '@/constants/theme';
 import { formatChildAge, parseDateKey, toDateKey } from '@/lib/dates';
 import { chooseProfileImage } from '@/lib/images';
 import KeyboardAwareForm from '@/components/KeyboardAwareForm';
-import { loadChild, saveChild } from '@/lib/storage';
+import { loadChild, saveChild, uploadChildPhoto } from '@/lib/storage';
 import type { ChildProfile } from '@/lib/types';
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
@@ -62,10 +62,21 @@ export default function EditChildScreen() {
         shareCode: '',
         members: [],
       };
+
+      let finalPhotoUri = photoUri ?? base.photoUri;
+
+      if (photoUri && photoUri !== base.photoUri) {
+        const publicUrl = await uploadChildPhoto(photoUri);
+        if (publicUrl) {
+          finalPhotoUri = publicUrl;
+          setPhotoUri(publicUrl);
+        }
+      }
+
       await saveChild({
         ...base,
         name: name.trim(),
-        photoUri: photoUri ?? base.photoUri,
+        photoUri: finalPhotoUri,
         birthDate: birthDate ? toDateKey(birthDate) : undefined,
         weightKg: weightKg.trim() || undefined,
         heightCm: heightCm.trim() || undefined,
