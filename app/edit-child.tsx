@@ -8,10 +8,9 @@ import { chooseProfileImage } from '@/lib/images';
 import KeyboardAwareForm from '@/components/KeyboardAwareForm';
 import { loadChild, saveChild, uploadChildPhoto } from '@/lib/storage';
 import type { ChildProfile } from '@/lib/types';
-import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 export default function EditChildScreen() {
   const [name, setName] = useState('');
@@ -100,7 +99,7 @@ export default function EditChildScreen() {
                 <Image
                   source={{ uri: photoUri }}
                   style={styles.avatar}
-                  contentFit="cover"
+                  resizeMode="cover"
                 />
               ) : (
                 <View style={styles.avatarFallback}>

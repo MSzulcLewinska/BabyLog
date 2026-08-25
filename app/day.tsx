@@ -3,12 +3,27 @@ import { EventTimeline } from '@/components/event-timeline';
 import { Palette } from '@/constants/theme';
 import { useLiveData } from '@/hooks/use-live-data';
 import { formatLongDate, parseDateKey, toDateKey } from '@/lib/dates';
-import { loadEvents } from '@/lib/storage';
+import { loadEvents, loadPlans } from '@/lib/storage';
+import type { LogEvent, Plan } from '@/lib/types';
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function planToEvent(plan: Plan): LogEvent {
+  return {
+    id: `plan-${plan.id}`,
+    kind: 'custom',
+    activityId: plan.activityId ?? 'custom',
+    title: `📋 ${plan.title}`,
+    icon: plan.icon,
+    color: plan.color,
+    time: plan.time,
+    date: plan.date,
+    notes: plan.note,
+  };
+}
 
 export default function DayScreen() {
   const params = useLocalSearchParams<{ date?: string }>();
@@ -19,24 +34,37 @@ export default function DayScreen() {
   const date = parseDateKey(dateKey);
 
   const events = useLiveData(loadEvents);
+  const plans = useLiveData(loadPlans);
 
-  const dayEvents = useMemo(
-    () =>
-      (events ?? [])
-        .filter((event) => event.date === dateKey)
-        .sort((a, b) => b.time.localeCompare(a.time)),
-    [events, dateKey]
-  );
+  const dayEvents = useMemo(() => {
+    const dayPlans = (plans ?? [])
+      .filter((plan) => plan.date === dateKey)
+      .map(planToEvent);
 
-  const milkAmount = dayEvents.reduce((sum, event) => {
-    if (event.kind !== 'milk') return sum;
-    const amount = Number(event.amount);
-    return Number.isFinite(amount) ? sum + amount : sum;
-  }, 0);
+    const dayLogs = (events ?? [])
+      .filter((event) => event.date === dateKey);
 
-  const poopCount = dayEvents.filter((event) => event.kind === 'poop').length;
-  const vitaminGiven = dayEvents.some(
-    (event) => event.kind === 'drops' && event.dropKind === 'vitamin-d'
+    return [...dayLogs, ...dayPlans].sort((a, b) =>
+      b.time.localeCompare(a.time)
+    );
+  }, [events, plans, dateKey]);
+
+  const milkAmount = (events ?? [])
+    .filter((event) => event.date === dateKey)
+    .reduce((sum, event) => {
+      if (event.kind !== 'milk') return sum;
+      const amount = Number(event.amount);
+      return Number.isFinite(amount) ? sum + amount : sum;
+    }, 0);
+
+  const poopCount = (events ?? []).filter(
+    (event) => event.date === dateKey && event.kind === 'poop'
+  ).length;
+  const vitaminGiven = (events ?? []).some(
+    (event) =>
+      event.date === dateKey &&
+      event.kind === 'drops' &&
+      event.dropKind === 'vitamin-d'
   );
 
   return (

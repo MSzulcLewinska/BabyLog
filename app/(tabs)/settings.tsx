@@ -4,11 +4,11 @@ import { useLiveData } from '@/hooks/use-live-data';
 import { formatChildAge } from '@/lib/dates';
 import { loadChild, loadUser, removeChildMember } from '@/lib/storage';
 import type { Member } from '@/lib/types';
-import { Image } from 'expo-image';
 import { router, type Href } from 'expo-router';
 import { useState } from 'react';
 import {
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -80,7 +80,7 @@ export default function SettingsScreen() {
             <Image
               source={{ uri: child.photoUri }}
               style={styles.avatar}
-              contentFit="cover"
+              resizeMode="cover"
             />
           ) : (
             <View style={styles.avatar}>

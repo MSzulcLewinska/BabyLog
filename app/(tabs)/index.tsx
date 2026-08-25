@@ -7,8 +7,8 @@ import { describeReminder } from '@/lib/reminders';
 import { loadChild, loadEvents, loadPlans } from '@/lib/storage';
 import { router, type Href } from 'expo-router';
 import { useEffect, useMemo } from 'react';
-import { Image } from 'expo-image';
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -78,7 +78,7 @@ export default function HomeScreen() {
                 <Image
                   source={{ uri: child.photoUri }}
                   style={styles.avatar}
-                  contentFit="cover"
+                  resizeMode="cover"
                 />
               ) : (
                 <View style={styles.avatar}>

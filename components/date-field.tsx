@@ -37,7 +37,7 @@ export function DateField({
             value={value ?? new Date()}
             mode="date"
             display="spinner"
-            maximumDate={maximumDate ?? new Date()}
+            maximumDate={maximumDate}
             minimumDate={minimumDate}
             onChange={(_, selected) => {
               if (Platform.OS === 'android') {

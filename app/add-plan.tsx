@@ -161,7 +161,6 @@ export default function AddPlanScreen() {
             label="Data"
             value={date}
             onChange={setDate}
-            minimumDate={new Date()}
           />
 
           <TimeField value={time} onChange={setTime} />
