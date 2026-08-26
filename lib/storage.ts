@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { notifyDataChanged } from '@/lib/bus';
 import { toDateKey } from '@/lib/dates';
@@ -746,14 +747,23 @@ async function uploadPhotoToStorage(
 
     const file = new File(localUri);
     if (!file.exists) {
+      console.warn('[photo] file does not exist:', localUri);
       return null;
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
     const path = `${childId}/${Date.now()}.jpg`;
-
     const db = getSupabase(session ?? (await loadSession()));
+
+    const base64 = await FileSystem.readAsStringAsync(localUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+
     const { error } = await db.storage
       .from('photos')
       .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
@@ -763,7 +773,8 @@ async function uploadPhotoToStorage(
       return null;
     }
 
-    return db.storage.from('photos').getPublicUrl(path).data.publicUrl;
+    const { data: urlData } = db.storage.from('photos').getPublicUrl(path);
+    return urlData.publicUrl;
   } catch (e) {
     console.warn('[photo] upload exception:', e);
     return null;
