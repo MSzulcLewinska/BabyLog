@@ -126,3 +126,23 @@ export function formatChildAge(
   const weeks = Math.floor(days / 7);
   return `${weeks} ${plural(weeks, 'tydzień', 'tygodnie', 'tygodni')}`;
 }
+
+export function formatChildAgeWeeks(
+  birthDateKey: string,
+  reference: Date = new Date()
+): string {
+  const birth = parseDateKey(birthDateKey);
+  const today = new Date(
+    reference.getFullYear(),
+    reference.getMonth(),
+    reference.getDate()
+  );
+
+  if (today.getTime() < birth.getTime()) {
+    return '';
+  }
+
+  const totalDays = Math.floor((today.getTime() - birth.getTime()) / DAY_MS);
+  const weeks = Math.floor(totalDays / 7);
+  return `${weeks} ${plural(weeks, 'tydzień', 'tygodnie', 'tygodni')}`;
+}

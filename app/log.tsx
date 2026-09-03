@@ -19,6 +19,13 @@ import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+type FeverMed = 'ibuprofen' | 'paracetamol';
+
+const FEVER_MEDICATIONS: { id: FeverMed; label: string; icon: string }[] = [
+  { id: 'ibuprofen', label: 'Ibuprofen', icon: '💊' },
+  { id: 'paracetamol', label: 'Paracetamol', icon: '💊' },
+];
+
 const DROP_OPTIONS = [
   { id: 'vitamin-d', label: 'Witamina D' },
   { id: 'probiotic', label: 'Probiotyk' },
@@ -46,6 +53,9 @@ export default function LogScreen() {
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [dropKind, setDropKind] = useState(params.dropKind || 'vitamin-d');
+  const [feverMed, setFeverMed] = useState<FeverMed | null>(null);
+
+  const isTemperature = params.activityId === 'temperature';
 
   const activity = useMemo(
     () =>
@@ -97,6 +107,7 @@ export default function LogScreen() {
         unit: kind === 'drops' || kind === 'poop' ? undefined : meta.unit,
         notes: notes.trim() || undefined,
         dropKind: kind === 'drops' ? dropKind : undefined,
+        feverMedication: isTemperature && feverMed ? feverMed : undefined,
         author,
       });
 
@@ -136,6 +147,29 @@ export default function LogScreen() {
           )}
 
           <TimeField value={time} onChange={setTime} />
+
+          {isTemperature && (
+            <View style={styles.feverSection}>
+              <Text style={styles.feverLabel}>Podany lek</Text>
+              <View style={styles.feverOptions}>
+                {FEVER_MEDICATIONS.map((med) => {
+                  const selected = feverMed === med.id;
+                  return (
+                    <Pressable
+                      key={med.id}
+                      style={[styles.feverOption, selected && styles.feverOptionSelected]}
+                      onPress={() => setFeverMed(selected ? null : med.id)}
+                    >
+                      <Text style={styles.feverOptionIcon}>{med.icon}</Text>
+                      <Text style={[styles.feverOptionLabel, selected && styles.feverOptionLabelSelected]}>
+                        {med.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           {(kind === 'milk' || (kind === 'custom' && meta.unit)) && (
             <FormField
@@ -227,6 +261,47 @@ const styles = StyleSheet.create({
   manageLinkText: {
     fontSize: 14,
     fontWeight: '600',
+    color: Palette.greenDark,
+  },
+  feverSection: {
+    marginTop: 12,
+  },
+  feverLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Palette.text,
+    marginBottom: 8,
+  },
+  feverOptions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  feverOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Palette.card,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: Palette.border,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  feverOptionSelected: {
+    borderColor: Palette.green,
+    backgroundColor: Palette.greenSoft,
+  },
+  feverOptionIcon: {
+    fontSize: 18,
+  },
+  feverOptionLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Palette.text,
+  },
+  feverOptionLabelSelected: {
     color: Palette.greenDark,
   },
 });

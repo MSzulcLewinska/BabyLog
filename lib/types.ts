@@ -13,6 +13,7 @@ export type LogEvent = {
   unit?: string;
   notes?: string;
   dropKind?: string;
+  feverMedication?: 'ibuprofen' | 'paracetamol';
   author?: string;
 };
 

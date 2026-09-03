@@ -1,7 +1,7 @@
 import { Palette } from '@/constants/theme';
 import { useAppState } from '@/hooks/use-app-state';
 import { useLiveData } from '@/hooks/use-live-data';
-import { formatChildAge } from '@/lib/dates';
+import { formatChildAge, formatChildAgeWeeks } from '@/lib/dates';
 import {
   loadChild,
   loadUser,
@@ -119,7 +119,7 @@ export default function SettingsScreen() {
             <Text style={styles.name}>{child?.name ?? 'Dodaj dziecko'}</Text>
             <Text style={styles.meta}>
               {child?.birthDate
-                ? formatChildAge(child.birthDate)
+                ? `${formatChildAge(child.birthDate)} · ${formatChildAgeWeeks(child.birthDate)}`
                 : 'Dotknij, aby edytować profil'}
             </Text>
           </View>

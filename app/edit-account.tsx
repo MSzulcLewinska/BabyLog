@@ -3,6 +3,7 @@ import { FormField } from '@/components/form-field';
 import KeyboardAwareForm from '@/components/KeyboardAwareForm';
 import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
+import { formatLongDate } from '@/lib/dates';
 import { loadUser, saveUser } from '@/lib/storage';
 import type { UserAccount } from '@/lib/types';
 import { router, useFocusEffect } from 'expo-router';
@@ -13,6 +14,7 @@ export default function EditAccountScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [provider, setProvider] = useState('');
+  const [signedInAt, setSignedInAt] = useState('');
   const [saving, setSaving] = useState(false);
 
   useFocusEffect(
@@ -24,6 +26,7 @@ export default function EditAccountScreen() {
         setName(loaded?.name ?? '');
         setEmail(loaded?.email ?? '');
         setProvider(loaded?.provider ?? 'google');
+        setSignedInAt(loaded?.signedInAt ?? '');
       });
 
       return () => {
@@ -67,6 +70,15 @@ export default function EditAccountScreen() {
               </Text>
             </View>
           </View>
+
+          {signedInAt && (
+            <View style={styles.infoCard}>
+              <Text style={styles.infoLabel}>Konto utworzone</Text>
+              <Text style={styles.infoValue}>
+                {formatLongDate(new Date(signedInAt))}
+              </Text>
+            </View>
+          )}
 
           <FormField
             label="Twoje imię"
@@ -112,6 +124,24 @@ const styles = StyleSheet.create({
     borderColor: Palette.border,
     padding: 14,
     marginTop: 8,
+  },
+  infoCard: {
+    backgroundColor: Palette.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    padding: 14,
+    marginTop: 8,
+  },
+  infoLabel: {
+    fontSize: 13,
+    color: Palette.textSecondary,
+  },
+  infoValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Palette.text,
+    marginTop: 2,
   },
   providerIcon: {
     fontSize: 22,

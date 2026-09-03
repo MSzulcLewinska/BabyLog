@@ -1,5 +1,6 @@
 import { BackHeader } from '@/components/back-header';
 import { EventTimeline } from '@/components/event-timeline';
+import { TemperatureChart } from '@/components/temperature-chart';
 import { Palette } from '@/constants/theme';
 import { useLiveData } from '@/hooks/use-live-data';
 import { formatLongDate, parseDateKey, toDateKey } from '@/lib/dates';
@@ -85,6 +86,8 @@ export default function DayScreen() {
               value={vitaminGiven ? '1/1' : '0/1'}
             />
           </View>
+
+          <TemperatureChart events={dayEvents} />
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Zdarzenia</Text>
