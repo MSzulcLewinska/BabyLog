@@ -6,7 +6,7 @@ import { Palette } from '@/constants/theme';
 import { formatChildAge, parseDateKey, toDateKey } from '@/lib/dates';
 import { chooseProfileImage } from '@/lib/images';
 import KeyboardAwareForm from '@/components/KeyboardAwareForm';
-import { loadChild, saveChild, uploadChildPhoto } from '@/lib/storage';
+import { loadChild, resolveSignedPhotoUrl, saveChild, uploadChildPhoto } from '@/lib/storage';
 import type { ChildProfile } from '@/lib/types';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -18,6 +18,7 @@ export default function EditChildScreen() {
   const [weightKg, setWeightKg] = useState('');
   const [heightCm, setHeightCm] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useFocusEffect(
@@ -31,6 +32,7 @@ export default function EditChildScreen() {
         setWeightKg(loaded.weightKg ?? '');
         setHeightCm(loaded.heightCm ?? '');
         setPhotoUri(loaded.photoUri ?? null);
+        setPhotoPath(loaded.photoPath ?? null);
       });
 
       return () => {
@@ -43,6 +45,7 @@ export default function EditChildScreen() {
     const uri = await chooseProfileImage();
     if (uri) {
       setPhotoUri(uri);
+      setPhotoPath(null);
     }
   };
 
@@ -62,26 +65,30 @@ export default function EditChildScreen() {
         members: [],
       };
 
-      let finalPhotoUri = photoUri ?? base.photoUri;
+      let finalPhotoPath = photoPath;
+      let finalPhotoUri = photoUri;
 
-      const needsUpload =
-        photoUri &&
-        (photoUri !== base.photoUri || photoUri.startsWith('file://'));
+      const needsUpload = photoUri && photoUri.startsWith('file://');
 
       if (needsUpload) {
-        const publicUrl = await uploadChildPhoto(photoUri);
-        if (publicUrl) {
-          finalPhotoUri = publicUrl;
-          setPhotoUri(publicUrl);
+        const storagePath = await uploadChildPhoto(photoUri);
+        if (storagePath) {
+          finalPhotoPath = storagePath;
+          const signedUrl = (await resolveSignedPhotoUrl(storagePath)) ?? storagePath;
+          finalPhotoUri = signedUrl;
+          setPhotoPath(storagePath);
+          setPhotoUri(signedUrl);
         } else {
-          finalPhotoUri = undefined;
+          finalPhotoPath = null;
+          finalPhotoUri = null;
         }
       }
 
       await saveChild({
         ...base,
         name: name.trim(),
-        photoUri: finalPhotoUri,
+        photoUri: finalPhotoUri ?? undefined,
+        photoPath: finalPhotoPath ?? undefined,
         birthDate: birthDate ? toDateKey(birthDate) : undefined,
         weightKg: weightKg.trim() || undefined,
         heightCm: heightCm.trim() || undefined,

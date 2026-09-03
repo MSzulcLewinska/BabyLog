@@ -39,6 +39,7 @@ export type ChildProfile = {
   shareCode: string;
   members: Member[];
   photoUri?: string;
+  photoPath?: string;
   birthDate?: string;
   weightKg?: string;
   heightCm?: string;
@@ -50,6 +51,7 @@ export type UserAccount = {
   email?: string;
   name?: string;
   signedInAt?: string;
+  privacyAccepted?: boolean;
 };
 
 export type ReminderKind = 'auto' | 'custom';

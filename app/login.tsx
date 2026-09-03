@@ -52,8 +52,8 @@ export default function LoginScreen() {
             <ActivityIndicator size="small" color={Palette.textSecondary} />
           ) : (
             <>
-              <Text style={styles.googleIcon}>G</Text>
-              <Text style={styles.googleLabel}>Kontynuuj z Google</Text>
+              <Text style={styles.googleIcon}>👤</Text>
+              <Text style={styles.googleLabel}>Utwórz konto lokalne</Text>
             </>
           )}
         </Pressable>
@@ -75,14 +75,12 @@ export default function LoginScreen() {
         </Pressable>
 
         <Text style={styles.note}>
-          Twoje dane pozostają zapisane na tym urządzeniu
+          Dane są bezpiecznie przechowywane w chmurze
         </Text>
       </View>
     </View>
   );
 }
-
-const GOOGLE_BLUE = '#4285F4';
 
 const styles = StyleSheet.create({
   screen: {
@@ -144,8 +142,6 @@ const styles = StyleSheet.create({
   },
   googleIcon: {
     fontSize: 20,
-    fontWeight: '800',
-    color: GOOGLE_BLUE,
     marginRight: 12,
   },
   googleLabel: {

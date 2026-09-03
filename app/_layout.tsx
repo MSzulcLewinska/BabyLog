@@ -30,7 +30,7 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const colorScheme = useColorScheme();
-  const { ready, signedIn, onboarded } = useAppState();
+  const { ready, signedIn, onboarded, privacyAccepted } = useAppState();
   const segments = useSegments();
   const router = useRouter();
 
@@ -39,12 +39,17 @@ function RootNavigator() {
 
     const current = segments[0] as string;
     const onAuthScreen =
-      current === 'login' || current === 'login-email' || current === 'setup-child' || current === 'join';
+      current === 'login' || current === 'login-email' || current === 'setup-child' || current === 'join' || current === 'consent';
 
     if (!signedIn) {
       if (current !== 'login' && current !== 'login-email' && current !== 'join') {
         router.replace('/login' as Href);
       }
+      return;
+    }
+
+    if (!privacyAccepted) {
+      if (current !== 'consent') router.replace('/consent' as Href);
       return;
     }
 
@@ -54,7 +59,7 @@ function RootNavigator() {
     }
 
     if (onAuthScreen) router.replace('/(tabs)' as Href);
-  }, [ready, signedIn, onboarded, segments, router]);
+  }, [ready, signedIn, onboarded, privacyAccepted, segments, router]);
 
   if (!ready) {
     return <View style={styles.bootScreen} />;
@@ -73,6 +78,7 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="login" />
         <Stack.Screen name="login-email" />
+        <Stack.Screen name="consent" />
         <Stack.Screen name="setup-child" />
         <Stack.Screen name="activities" />
         <Stack.Screen name="day" />

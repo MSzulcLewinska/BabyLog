@@ -367,17 +367,26 @@ revoke all on function public.find_child_by_owner_email (text) from public;
 grant execute on function public.find_child_by_owner_email (text) to anon, authenticated;
 
 -- ---------- Zdjęcia dziecka (Storage) ----------
--- Publiczny bucket; zapis tylko dla członków dziecka (pierwszy folder ścieżki
--- to id dziecka, np. photos/<child_id>/123456.jpg)
+-- Prywatny bucket; zapis tylko dla członków dziecka (pierwszy folder ścieżki
+-- to id dziecka, np. photos/<child_id>/123456.jpg). Odczyt wyłącznie przez
+-- członków — aplikacja generuje podpisane URL-e z ograniczonym czasem ważności.
 
 insert into storage.buckets (id, name, public)
-values ('photos', 'photos', true)
-on conflict (id) do nothing;
+values ('photos', 'photos', false)
+on conflict (id) do update set public = false;
 
 drop policy if exists "photos_member_insert" on storage.objects;
 create policy "photos_member_insert" on storage.objects
   for insert to anon, authenticated
   with check (
+    bucket_id = 'photos'
+    and (storage.foldername(name))[1] = public.current_member_child ()::text
+  );
+
+drop policy if exists "photos_member_select" on storage.objects;
+create policy "photos_member_select" on storage.objects
+  for select to anon, authenticated
+  using (
     bucket_id = 'photos'
     and (storage.foldername(name))[1] = public.current_member_child ()::text
   );

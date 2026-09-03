@@ -3,6 +3,8 @@ import { useAppState } from '@/hooks/use-app-state';
 import { useLiveData } from '@/hooks/use-live-data';
 import { formatChildAge, formatChildAgeWeeks } from '@/lib/dates';
 import {
+  deleteAccountData,
+  exportAllData,
   loadChild,
   loadUser,
   removeChildMember,
@@ -10,17 +12,21 @@ import {
 } from '@/lib/storage';
 import type { Member } from '@/lib/types';
 import { router, type Href } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
+  Linking,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const PRIVACY_URL = 'https://mszulclewinska.github.io/BabyLog/privacy.html';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -28,9 +34,62 @@ export default function SettingsScreen() {
   const user = useLiveData(loadUser);
   const { signOut } = useAppState();
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void import('@/lib/storage').then(({ isCurrentUserOwner }) =>
+      isCurrentUserOwner().then((v) => {
+        if (active) setIsOwner(v);
+      })
+    );
+    return () => {
+      active = false;
+    };
+  }, [child]);
 
   const accountLabel =
     user?.name || user?.email || 'Uzupełnij dane konta';
+
+  const handleExportData = () => {
+    void (async () => {
+      try {
+        const json = await exportAllData();
+        await Share.share({ message: json });
+      } catch {
+        Alert.alert('Błąd', 'Nie udało się przygotować danych.');
+      }
+    })();
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Usunąć wszystkie dane?',
+      'To trwale usunie profil dziecka oraz wszystkie wpisy, zdjęcia i dane członków z chmury. Tej operacji nie można cofnąć.',
+      [
+        { text: 'Anuluj', style: 'cancel' },
+        {
+          text: 'Usuń wszystko',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await deleteAccountData();
+                await signOut();
+                router.replace('/login' as Href);
+              } catch {
+                Alert.alert('Błąd', 'Nie udało się usunąć danych.');
+              }
+            })();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleOpenPrivacy = () => {
+    void Linking.openURL(PRIVACY_URL);
+  };
 
   const handleSignOut = () => {
     Alert.alert(
@@ -131,7 +190,7 @@ export default function SettingsScreen() {
           <SettingsRow
             icon="👤"
             label={accountLabel}
-            sub="Zalogowano przez Google"
+            sub="Konto lokalne"
             onPress={() => router.push('/edit-account' as Href)}
           />
           <SettingsRow
@@ -178,6 +237,29 @@ export default function SettingsScreen() {
             onPress={() => router.push('/join' as Href)}
             last
           />
+        </View>
+
+        <Text style={styles.sectionLabel}>Prywatność i dane</Text>
+        <View style={styles.card}>
+          <SettingsRow
+            icon="📄"
+            label="Polityka prywatności"
+            onPress={handleOpenPrivacy}
+          />
+          <SettingsRow
+            icon="⬇️"
+            label="Pobierz moje dane"
+            onPress={handleExportData}
+          />
+          {isOwner && (
+            <SettingsRow
+              icon="🗑️"
+              label="Usuń konto i wszystkie dane"
+              sub="Nieodwracalne"
+              onPress={handleDeleteAccount}
+              last
+            />
+          )}
         </View>
       </ScrollView>
     </View>

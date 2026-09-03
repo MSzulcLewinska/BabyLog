@@ -424,14 +424,24 @@ export async function loadChild(): Promise<ChildProfile | null> {
       (membersResult.data ?? []) as unknown as MemberRow[]
     ).map((m) => ({ id: m.id, name: m.name, role: m.role as Member['role'] }));
 
+    let photoUri: string | undefined = undefined;
+    let photoPath: string | undefined = undefined;
+    if (row.photo_uri && !row.photo_uri.startsWith('file://')) {
+      photoUri = (await resolveSignedPhotoUrl(row.photo_uri)) ?? undefined;
+      // Zapisujemy ścieżkę w buckecie tylko dla nowego formatu (nie pełny http URL).
+      if (!row.photo_uri.startsWith('http')) {
+        photoPath = row.photo_uri;
+      } else {
+        photoPath = photoUri;
+      }
+    }
+
     const profile: ChildProfile = {
       name: row.name,
       shareCode: row.share_code,
       members,
-      photoUri:
-        row.photo_uri && !row.photo_uri.startsWith('file://')
-          ? row.photo_uri
-          : undefined,
+      photoUri,
+      photoPath,
       birthDate: row.birth_date ?? undefined,
       weightKg: row.weight_kg != null ? String(row.weight_kg) : undefined,
       heightCm: row.height_cm != null ? String(row.height_cm) : undefined,
@@ -461,13 +471,19 @@ export async function saveChild(child: ChildProfile): Promise<void> {
 
   try {
     const session = await requireSession();
+    const storedPath = child.photoPath && !child.photoPath.startsWith('file://')
+      ? child.photoPath
+      : null;
+    const legacyUri =
+      child.photoUri && !child.photoUri.startsWith('file://')
+        ? stripSignedPhotoUrl(child.photoUri)
+        : null;
+
     const { error } = await clientFor(session)
       .from('children')
       .update({
         name: child.name,
-        photo_uri: child.photoUri?.startsWith('file://')
-          ? null
-          : child.photoUri ?? null,
+        photo_uri: storedPath ?? legacyUri,
         birth_date: child.birthDate ?? null,
         weight_kg: child.weightKg != null ? Number(child.weightKg) : null,
         height_cm: child.heightCm != null ? Number(child.heightCm) : null,
@@ -480,6 +496,16 @@ export async function saveChild(child: ChildProfile): Promise<void> {
   } catch {
     // offline
   }
+}
+
+function stripSignedPhotoUrl(photoUri: string | undefined): string | null {
+  if (!photoUri) return null;
+  const marker = '/storage/v1/object/sign/photos/';
+  const idx = photoUri.indexOf(marker);
+  if (idx === -1) return photoUri;
+  const after = photoUri.slice(idx + marker.length);
+  const path = after.split('?')[0];
+  return path || photoUri;
 }
 
 export async function addChildMember(member: Member): Promise<void> {
@@ -629,6 +655,20 @@ export async function saveUser(user: UserAccount): Promise<void> {
   notifyDataChanged();
 }
 
+export async function hasAcceptedPrivacy(): Promise<boolean> {
+  const user = await loadUser();
+  return Boolean(user?.privacyAccepted);
+}
+
+export async function acceptPrivacy(): Promise<void> {
+  const user = (await loadUser()) ?? {
+    id: `google-${Date.now()}`,
+    provider: 'local',
+    signedInAt: new Date().toISOString(),
+  };
+  await saveUser({ ...user, privacyAccepted: true });
+}
+
 export async function signOut(): Promise<void> {
   // Wylogowanie oznacza only rozłączenie konta Google — sesja urządzeniowa
   // (dane dziecka, wydarzenia, plany) zostaje zachowana.
@@ -773,10 +813,37 @@ async function uploadPhotoToStorage(
       return null;
     }
 
-    const { data: urlData } = db.storage.from('photos').getPublicUrl(path);
-    return urlData.publicUrl;
+    // Zwracamy ścieżkę w buckecie (bucket jest prywatny).
+    return path;
   } catch (e) {
     console.warn('[photo] upload exception:', e);
+    return null;
+  }
+}
+
+export async function resolveSignedPhotoUrl(
+  path: string | undefined
+): Promise<string | null> {
+  if (!path) return null;
+  // Lokalne pliki (jeszcze nieprzesłane) wyświetlamy bezpośrednio.
+  if (path.startsWith('file://')) return path;
+  // Pełny adres URL (np. obsługiwany wcześniej publiczny) zwracamy bez zmian.
+  if (path.startsWith('http')) return path;
+
+  try {
+    const session = await loadSession();
+    if (!session) return null;
+    const db = getSupabase(session);
+    const { data, error } = await db.storage
+      .from('photos')
+      .createSignedUrl(path, 3600);
+    if (error) {
+      console.warn('[photo] signed url error:', error.message);
+      return null;
+    }
+    return data?.signedUrl ?? null;
+  } catch (e) {
+    console.warn('[photo] signed url exception:', e);
     return null;
   }
 }
@@ -1073,4 +1140,74 @@ export async function migrateLocalToCloud(ownerFallback: string, ownerEmail?: st
 async function clearSessionKeysOnFailure(): Promise<void> {
   await AsyncStorage.removeItem(MIGRATED_KEY);
   await clearSession();
+}
+
+// ---------- Eksport / usuwanie danych (RODO / Google Play) ----------
+
+export async function exportAllData(): Promise<string> {
+  const [child, events, activities, plans, user] = await Promise.all([
+    loadChild(),
+    loadEvents(),
+    loadActivities(),
+    loadPlans(),
+    loadUser(),
+  ]);
+
+  const data = {
+    exportedAt: new Date().toISOString(),
+    app: 'BabyLog',
+    user: {
+      name: user?.name ?? null,
+      email: user?.email ?? null,
+      signedInAt: user?.signedInAt ?? null,
+    },
+    child,
+    events,
+    activities,
+    plans,
+  };
+
+  return JSON.stringify(data, null, 2);
+}
+
+export async function isCurrentUserOwner(): Promise<boolean> {
+  try {
+    const session = await loadSession();
+    if (!session) return false;
+    const child = await loadChild();
+    const me = (child?.members ?? []).find(
+      (member) => member.id === session.deviceId
+    );
+    return me?.role === 'owner';
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteAccountData(): Promise<void> {
+  const session = await requireSession();
+
+  // Usuwa profil dziecka — wszelkie powiązane rekordy (członkowie, zdarzenia,
+  // plany, aktywności, tokeny push) są kasowane kaskadowo w bazie.
+  const { error } = await clientFor(session)
+    .from('children')
+    .delete()
+    .eq('id', session.childId);
+
+  if (error) {
+    throw error;
+  }
+
+  // Wyczyść lokalną pamięć podręczną i sesję.
+  await AsyncStorage.multiRemove([
+    CHILD_KEY,
+    EVENTS_KEY,
+    ACTIVITIES_KEY,
+    PLANS_KEY,
+    USER_KEY,
+    MIGRATED_KEY,
+    PLAN_NOTIFS_KEY,
+  ]);
+  await clearSession();
+  notifyDataChanged();
 }

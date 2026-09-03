@@ -3,8 +3,10 @@ import {
   syncPlanNotifications,
 } from '@/lib/notifications';
 import {
+  acceptPrivacy,
   createChildWithOwner,
   findChildByEmail,
+  hasAcceptedPrivacy,
   hasSavedChild,
   loadPlans,
   loadUser,
@@ -30,6 +32,8 @@ type AppStateValue = {
   ready: boolean;
   signedIn: boolean;
   onboarded: boolean;
+  privacyAccepted: boolean;
+  acceptPrivacyPolicy: () => Promise<void>;
   signIn: (user?: Partial<UserAccount>) => Promise<void>;
   loginWithEmail: (email: string) => Promise<void>;
   completeSetup: (name: string, photoUri?: string) => Promise<void>;
@@ -43,6 +47,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [userName, setUserName] = useState('');
 
   useEffect(() => {
@@ -50,7 +55,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     let sub: Notifications.Subscription | null = null;
 
     const boot = async () => {
-      const [user, session] = await Promise.all([loadUser(), loadSession()]);
+      const [user, session, accepted] = await Promise.all([
+        loadUser(),
+        loadSession(),
+        hasAcceptedPrivacy(),
+      ]);
 
       if (!session && user) {
         // Stare dane lokalne (przed Supabase) — jednorazowa migracja do chmury
@@ -85,6 +94,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       setUserName(user?.name ?? '');
       setSignedIn(Boolean(user) || Boolean(finalSession));
+      setPrivacyAccepted(accepted);
       setOnboarded(Boolean(finalSession) || childSaved);
       setReady(true);
     };
@@ -99,8 +109,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (user?: Partial<UserAccount>) => {
     const account: UserAccount = {
-      id: user?.id ?? `google-${Date.now()}`,
-      provider: user?.provider ?? 'google',
+      id: user?.id ?? `local-${Date.now()}`,
+      provider: user?.provider ?? 'local',
       email: user?.email,
       name: user?.name,
       signedInAt: new Date().toISOString(),
@@ -108,8 +118,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     await saveUser(account);
     setUserName(account.name ?? '');
     setSignedIn(true);
-
-    // 1. Sprawdź istniejącą sesję lokalną (powrót po wylogowaniu bez zamknięcia apki)
+    setPrivacyAccepted(Boolean(user?.privacyAccepted));
     const [session, child] = await Promise.all([
       loadSession(),
       hasSavedChild(),
@@ -177,9 +186,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       name: result.memberName,
       signedInAt: new Date().toISOString(),
     };
+    const existingUser = await loadUser();
+    if (existingUser?.privacyAccepted) {
+      account.privacyAccepted = true;
+    }
     await saveUser(account);
     setUserName(result.memberName);
     setSignedIn(true);
+    setPrivacyAccepted(Boolean(account.privacyAccepted));
     setOnboarded(true);
     void registerPushToken();
   }, []);
@@ -189,16 +203,44 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setOnboarded(true);
   }, []);
 
+  const acceptPrivacyPolicy = useCallback(async () => {
+    await acceptPrivacy();
+    setPrivacyAccepted(true);
+  }, []);
+
   const signOut = useCallback(async () => {
     await storageSignOut();
     setUserName('');
     setSignedIn(false);
     setOnboarded(false);
+    setPrivacyAccepted(false);
   }, []);
 
   const value = useMemo(
-    () => ({ ready, signedIn, onboarded, signIn, loginWithEmail, completeSetup, markJoined, signOut }),
-    [ready, signedIn, onboarded, signIn, loginWithEmail, completeSetup, markJoined, signOut]
+    () => ({
+      ready,
+      signedIn,
+      onboarded,
+      privacyAccepted,
+      acceptPrivacyPolicy,
+      signIn,
+      loginWithEmail,
+      completeSetup,
+      markJoined,
+      signOut,
+    }),
+    [
+      ready,
+      signedIn,
+      onboarded,
+      privacyAccepted,
+      acceptPrivacyPolicy,
+      signIn,
+      loginWithEmail,
+      completeSetup,
+      markJoined,
+      signOut,
+    ]
   );
 
   return (

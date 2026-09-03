@@ -64,7 +64,7 @@ export default function EditAccountScreen() {
           <View style={styles.providerCard}>
             <Text style={styles.providerIcon}>🔐</Text>
             <View>
-              <Text style={styles.providerLabel}>Logowanie przez Google</Text>
+              <Text style={styles.providerLabel}>Konto</Text>
               <Text style={styles.providerValue}>
                 {email.trim() || 'Konto lokalne'}
               </Text>
