@@ -11,12 +11,14 @@ import {
   addEvent,
   loadActivities,
   loadChild,
+  loadEvents,
   loadUser,
   newId,
+  updateEvent,
 } from '@/lib/storage';
 import type { Activity, EventKind } from '@/lib/types';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 type FeverMed = 'ibuprofen' | 'paracetamol';
@@ -45,15 +47,42 @@ export default function LogScreen() {
     kind?: string;
     activityId?: string;
     dropKind?: string;
+    eventId?: string;
   }>();
 
   const kind = (params.kind as EventKind) || 'milk';
   const liveActivities = useLiveData(loadActivities);
+  const liveEvents = useLiveData(loadEvents);
   const [time, setTime] = useState(new Date());
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [dropKind, setDropKind] = useState(params.dropKind || 'vitamin-d');
   const [feverMed, setFeverMed] = useState<FeverMed | null>(null);
+
+  const editingEvent = useMemo(
+    () =>
+      params.eventId
+        ? (liveEvents ?? []).find((event) => event.id === params.eventId) ??
+          null
+        : null,
+    [liveEvents, params.eventId]
+  );
+
+  useEffect(() => {
+    if (!editingEvent) return;
+    setTime((() => {
+      const [hours, minutes] = editingEvent.time.split(':').map(Number);
+      const d = new Date();
+      d.setHours(hours ?? 0, minutes ?? 0, 0, 0);
+      return d;
+    })());
+    setAmount(editingEvent.amount ?? '');
+    setNotes(editingEvent.notes ?? '');
+    if (editingEvent.dropKind) setDropKind(editingEvent.dropKind);
+    if (editingEvent.feverMedication) {
+      setFeverMed(editingEvent.feverMedication as FeverMed);
+    }
+  }, [editingEvent]);
 
   const isTemperature = params.activityId === 'temperature';
 
@@ -67,11 +96,12 @@ export default function LogScreen() {
   const meta = activity ?? { ...FALLBACK[kind], id: kind, builtin: true, kind };
 
   const title = useMemo(() => {
+    if (editingEvent) return `Edytuj: ${editingEvent.title}`;
     if (kind === 'milk') return 'Dodaj mleko';
     if (kind === 'poop') return 'Dodaj kupę';
     if (kind === 'drops') return 'Dodaj krople / witaminy';
     return `Dodaj: ${meta.name}`;
-  }, [kind, meta.name]);
+  }, [editingEvent, kind, meta.name]);
 
   const save = async () => {
     if (kind === 'milk' && !amount.trim()) {
@@ -94,25 +124,46 @@ export default function LogScreen() {
           ?.name ||
         undefined;
 
-      await addEvent({
-        id: newId(),
-        kind,
-        activityId: meta.id,
-        title: titleForEvent,
-        icon: meta.icon,
-        color: meta.color,
-        time: formatTime(time),
-        date: toDateKey(new Date()),
-        amount: amount.trim() || undefined,
-        unit: kind === 'drops' || kind === 'poop' ? undefined : meta.unit,
-        notes: notes.trim() || undefined,
-        dropKind: kind === 'drops' ? dropKind : undefined,
-        feverMedication: isTemperature && feverMed ? feverMed : undefined,
-        author,
-      });
+      if (editingEvent) {
+        await updateEvent({
+          ...editingEvent,
+          title: titleForEvent,
+          icon: meta.icon,
+          color: meta.color,
+          time: formatTime(time),
+          amount: amount.trim() || undefined,
+          unit: kind === 'drops' || kind === 'poop' ? undefined : meta.unit,
+          notes: notes.trim() || undefined,
+          dropKind: kind === 'drops' ? dropKind : undefined,
+          feverMedication: isTemperature && feverMed ? feverMed : undefined,
+        });
+      } else {
+        await addEvent({
+          id: newId(),
+          kind,
+          activityId: meta.id,
+          title: titleForEvent,
+          icon: meta.icon,
+          color: meta.color,
+          time: formatTime(time),
+          date: toDateKey(new Date()),
+          amount: amount.trim() || undefined,
+          unit: kind === 'drops' || kind === 'poop' ? undefined : meta.unit,
+          notes: notes.trim() || undefined,
+          dropKind: kind === 'drops' ? dropKind : undefined,
+          feverMedication: isTemperature && feverMed ? feverMed : undefined,
+          author,
+        });
+      }
 
       Alert.alert('Zapisano', titleForEvent, [
-        { text: 'OK', onPress: () => router.navigate('/(tabs)' as Href) },
+        {
+          text: 'OK',
+          onPress: () =>
+            editingEvent
+              ? router.back()
+              : router.navigate('/(tabs)' as Href),
+        },
       ]);
     } catch {
       Alert.alert('Błąd zapisu', 'Nie udało się zapisać zdarzenia.');

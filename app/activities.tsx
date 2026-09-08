@@ -1,12 +1,34 @@
 import { BackHeader } from '@/components/back-header';
 import { Palette } from '@/constants/theme';
 import { useLiveData } from '@/hooks/use-live-data';
-import { loadActivities } from '@/lib/storage';
+import { loadActivities, removeActivity } from '@/lib/storage';
 import { router, type Href } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 export default function ActivitiesScreen() {
   const activities = useLiveData(loadActivities) ?? [];
+
+  const handleDelete = (id: string, name: string) => {
+    Alert.alert(
+      'Usunąć czynność?',
+      `Usunąć „${name}" z listy czynności?`,
+      [
+        { text: 'Anuluj', style: 'cancel' },
+        {
+          text: 'Usuń',
+          style: 'destructive',
+          onPress: () => void removeActivity(id),
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.screen}>
@@ -40,6 +62,13 @@ export default function ActivitiesScreen() {
                 <Text style={styles.icon}>{activity.icon}</Text>
               </View>
               <Text style={styles.name}>{activity.name}</Text>
+              <Pressable
+                hitSlop={10}
+                style={styles.deleteWrap}
+                onPress={() => handleDelete(activity.id, activity.name)}
+              >
+                <Text style={styles.deleteIcon}>🗑️</Text>
+              </Pressable>
               <Text style={styles.chevron}>›</Text>
             </Pressable>
           ))}
@@ -50,6 +79,13 @@ export default function ActivitiesScreen() {
           onPress={() => router.push('/add-activity' as Href)}
         >
           <Text style={styles.addText}>＋  Dodaj czynność</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.addButton, styles.dietButton]}
+          onPress={() => router.push('/diet' as Href)}
+        >
+          <Text style={styles.addText}>🍎  Dieta (BLW)</Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -100,6 +136,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: Palette.text,
   },
+  deleteWrap: {
+    marginRight: 12,
+    padding: 2,
+  },
+  deleteIcon: {
+    fontSize: 16,
+    opacity: 0.7,
+  },
   chevron: {
     fontSize: 22,
     color: Palette.textMuted,
@@ -113,6 +157,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Palette.card,
+  },
+  dietButton: {
+    marginTop: 10,
+    borderColor: '#F59E0B',
   },
   addText: {
     color: Palette.greenDark,

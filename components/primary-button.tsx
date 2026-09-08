@@ -4,11 +4,15 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 type PrimaryButtonProps = {
   label: string;
   onPress: () => void;
+  danger?: boolean;
 };
 
-export function PrimaryButton({ label, onPress }: PrimaryButtonProps) {
+export function PrimaryButton({ label, onPress, danger }: PrimaryButtonProps) {
   return (
-    <Pressable style={styles.button} onPress={onPress}>
+    <Pressable
+      style={[styles.button, danger && styles.buttonDanger]}
+      onPress={onPress}
+    >
       <Text style={styles.label}>{label}</Text>
     </Pressable>
   );
@@ -22,6 +26,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 24,
+  },
+  buttonDanger: {
+    backgroundColor: Palette.danger,
   },
   label: {
     color: '#FFFFFF',

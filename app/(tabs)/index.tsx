@@ -4,10 +4,11 @@ import { useLiveData } from '@/hooks/use-live-data';
 import { formatLongDate, toDateKey } from '@/lib/dates';
 import { syncPlanNotifications } from '@/lib/notifications';
 import { describeReminder } from '@/lib/reminders';
-import { loadChild, loadEvents, loadPlans } from '@/lib/storage';
+import { loadChild, loadEvents, loadPlans, removeEvent } from '@/lib/storage';
 import { router, type Href } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import {
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -59,6 +60,22 @@ export default function HomeScreen() {
     (event) => event.kind === 'drops' && event.dropKind === 'vitamin-d'
   );
 
+  const handleDeleteEvent = (eventId: string) => {
+    const event = todayEvents.find((item) => item.id === eventId);
+    Alert.alert(
+      'Usunąć wpis?',
+      event ? `Usunąć „${event.title}" (${event.time})?` : 'Usunąć ten wpis?',
+      [
+        { text: 'Anuluj', style: 'cancel' },
+        {
+          text: 'Usuń',
+          style: 'destructive',
+          onPress: () => void removeEvent(eventId),
+        },
+      ]
+    );
+  };
+
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -95,7 +112,7 @@ export default function HomeScreen() {
             <View style={styles.headerButtons}>
               <Pressable
                 style={styles.roundButton}
-                onPress={() => router.push('/add-plan' as Href)}
+                onPress={() => router.push('/children' as Href)}
               >
                 <Text style={styles.roundButtonIcon}>＋</Text>
               </Pressable>
@@ -126,7 +143,13 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <EventTimeline events={todayEvents} />
+          <EventTimeline
+            events={todayEvents}
+            onPressEvent={(event) =>
+              router.push(`/event-detail?id=${event.id}` as Href)
+            }
+            onDeleteEvent={(event) => handleDeleteEvent(event.id)}
+          />
 
           {upcomingPlans.length > 0 && (
             <>
@@ -208,21 +231,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: Palette.greenSoft,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   avatarText: {
-    fontSize: 21,
+    fontSize: 26,
     fontWeight: '700',
     color: Palette.greenDark,
   },
   babyName: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '700',
     color: Palette.text,
   },

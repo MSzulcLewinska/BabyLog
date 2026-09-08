@@ -9,7 +9,10 @@ import {
   getSupabase,
   isSupabaseConfigured,
   loadSession,
+  loadSessions,
+  removeSession,
   saveSession,
+  setActiveChild,
   type DeviceSession,
 } from '@/lib/supabase';
 import type {
@@ -334,6 +337,54 @@ export async function addEvent(event: LogEvent): Promise<void> {
   }
 }
 
+export async function removeEvent(eventId: string): Promise<void> {
+  const events = await readCache<LogEvent[]>(EVENTS_KEY, []);
+  await writeCache(
+    EVENTS_KEY,
+    events.filter((event) => event.id !== eventId)
+  );
+  notifyDataChanged();
+
+  try {
+    const session = await requireSession();
+    const { error } = await clientFor(session)
+      .from('events')
+      .delete()
+      .eq('id', eventId)
+      .eq('child_id', session.childId);
+
+    if (error) {
+      throw error;
+    }
+  } catch {
+    // offline
+  }
+}
+
+export async function updateEvent(event: LogEvent): Promise<void> {
+  const events = await readCache<LogEvent[]>(EVENTS_KEY, []);
+  await writeCache(
+    EVENTS_KEY,
+    events.map((item) => (item.id === event.id ? event : item))
+  );
+  notifyDataChanged();
+
+  try {
+    const session = await requireSession();
+    const { error } = await clientFor(session)
+      .from('events')
+      .update(eventToRow(event, session.childId))
+      .eq('id', event.id)
+      .eq('child_id', session.childId);
+
+    if (error) {
+      throw error;
+    }
+  } catch {
+    // offline
+  }
+}
+
 export async function loadActivities(): Promise<Activity[]> {
   if (!isSupabaseConfigured()) {
     return readCache<Activity[]>(ACTIVITIES_KEY, DEFAULT_ACTIVITIES);
@@ -385,6 +436,30 @@ export async function addActivity(activity: Activity): Promise<void> {
   }
 }
 
+export async function removeActivity(activityId: string): Promise<void> {
+  const activities = await readCache<Activity[]>(ACTIVITIES_KEY, []);
+  await writeCache(
+    ACTIVITIES_KEY,
+    activities.filter((activity) => activity.id !== activityId)
+  );
+  notifyDataChanged();
+
+  try {
+    const session = await requireSession();
+    const { error } = await clientFor(session)
+      .from('activities')
+      .delete()
+      .eq('id', activityId)
+      .eq('child_id', session.childId);
+
+    if (error) {
+      throw error;
+    }
+  } catch {
+    // offline
+  }
+}
+
 // ---------- Dziecko i członkowie ----------
 
 export async function loadChild(): Promise<ChildProfile | null> {
@@ -415,8 +490,8 @@ export async function loadChild(): Promise<ChildProfile | null> {
 
     if (!row) {
       // Sesja istnieje, ale urządzenie nie widzi żadnego dziecka —
-      // dostęp wygasł lub sesja jest uszkodzona. Wylogowujemy.
-      await clearSession();
+      // dostęp wygasł lub sesja jest uszkodzona. Usuwamy tylko tę sesję.
+      await removeSession(session.childId);
       return readCachedChild();
     }
 
@@ -572,6 +647,109 @@ export async function removeChildMember(memberId: string): Promise<void> {
   } catch {
     // offline
   }
+}
+
+// ---------- Wiele dzieci ----------
+
+export type ChildSummary = {
+  childId: string;
+  name: string;
+  photoUri?: string;
+  isActive: boolean;
+  isOwner: boolean;
+};
+
+export async function listChildren(): Promise<ChildSummary[]> {
+  const sessions = await loadSessions();
+  const active = await loadSession();
+
+  const summaries = await Promise.all(
+    sessions.map(async (session) => {
+      let name = 'Dziecko';
+      let photoPath: string | undefined;
+      let photoUri: string | undefined;
+      let isOwner = false;
+
+      try {
+        const db = getSupabase(session);
+        const { data, error } = await db
+          .from('children')
+          .select('name, photo_uri, id')
+          .eq('id', session.childId)
+          .maybeSingle();
+
+        if (!error && data) {
+          const row = data as unknown as ChildRow;
+          name = row.name;
+          photoPath = row.photo_uri ?? undefined;
+        }
+
+        const { data: members, error: membersError } = await db
+          .from('members')
+          .select('id, role')
+          .eq('child_id', session.childId);
+
+        if (!membersError && members) {
+          const me = (members as unknown as { id: string; role: string }[]).find(
+            (m) => m.id === session.deviceId
+          );
+          isOwner = me?.role === 'owner';
+        }
+      } catch {
+        // offline — używamy nazwy zastępczej
+      }
+
+      if (photoPath && !photoPath.startsWith('file://')) {
+        photoUri =
+          (await resolveSignedPhotoUrl(photoPath)) ?? undefined;
+      }
+
+      return {
+        childId: session.childId,
+        name,
+        photoUri,
+        isActive: session.childId === active?.childId,
+        isOwner,
+      };
+    })
+  );
+
+  const sorted = [...summaries].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return sorted;
+}
+
+export async function switchChild(childId: string): Promise<void> {
+  await setActiveChild(childId);
+  await AsyncStorage.multiRemove([CHILD_KEY, EVENTS_KEY, ACTIVITIES_KEY, PLANS_KEY]);
+  notifyDataChanged();
+  await Promise.all([loadChild(), loadActivities(), loadEvents(), loadPlans()]);
+}
+
+export async function removeLocalChild(childId: string): Promise<void> {
+  const sessions = await loadSessions();
+
+  if (sessions.length <= 1) {
+    return;
+  }
+
+  const active = await loadSession();
+  await removeSession(childId);
+
+  if (active?.childId === childId) {
+    const remaining = sessions.filter((session) => session.childId !== childId);
+    const next = remaining[0];
+
+    if (next) {
+      await setActiveChild(next.childId);
+    }
+  }
+
+  await AsyncStorage.multiRemove([CHILD_KEY, EVENTS_KEY, ACTIVITIES_KEY, PLANS_KEY]);
+  notifyDataChanged();
 }
 
 // ---------- Plany ----------
@@ -1198,7 +1376,7 @@ export async function deleteAccountData(): Promise<void> {
     throw error;
   }
 
-  // Wyczyść lokalną pamięć podręczną i sesję.
+  // Wyczyść lokalną pamięć podręczną zachowując sesje pozostałych dzieci.
   await AsyncStorage.multiRemove([
     CHILD_KEY,
     EVENTS_KEY,
@@ -1208,6 +1386,6 @@ export async function deleteAccountData(): Promise<void> {
     MIGRATED_KEY,
     PLAN_NOTIFS_KEY,
   ]);
-  await clearSession();
+  await removeSession(session.childId);
   notifyDataChanged();
 }

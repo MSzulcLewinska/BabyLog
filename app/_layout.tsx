@@ -84,6 +84,10 @@ function RootNavigator() {
         <Stack.Screen name="day" />
         <Stack.Screen name="log" />
         <Stack.Screen name="add-activity" />
+        <Stack.Screen name="event-detail" />
+        <Stack.Screen name="children" />
+        <Stack.Screen name="add-child" />
+        <Stack.Screen name="diet" />
         <Stack.Screen name="share" />
         <Stack.Screen name="join" />
         <Stack.Screen name="edit-child" />

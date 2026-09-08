@@ -8,7 +8,12 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-const ICONS = ['🍼', '💩', '💧', '🌡️', '😴', '💊', '🐤', '✨', '❤️', '🌙'];
+const ICONS = [
+  '🍼', '💩', '💧', '🌡️', '😴', '💊', '🐤', '✨', '❤️', '🌙',
+  '🍎', '🥣', '🧸', '🚿', '🚶', '👕', '🏥', '🎵', '📷', '🌳',
+  '🍌', '🍐', '🍞', '🧀', '🥚', '🥕', '🍚', '🍓', '🥤', '🦷',
+  '⚽',
+];
 const COLORS = ['#3B82F6', '#34C759', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
 
 export default function AddActivityScreen() {
