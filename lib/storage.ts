@@ -319,10 +319,6 @@ export async function loadEvents(): Promise<LogEvent[]> {
 }
 
 export async function addEvent(event: LogEvent): Promise<void> {
-  const events = await readCache<LogEvent[]>(EVENTS_KEY, []);
-  await writeCache(EVENTS_KEY, [...events, event]);
-  notifyDataChanged();
-
   try {
     const session = await requireSession();
     const { error } = await clientFor(session)
@@ -335,16 +331,13 @@ export async function addEvent(event: LogEvent): Promise<void> {
   } catch {
     // offline — zostaje w cache, sync przy następnym uruchomieniu
   }
+
+  const events = await readCache<LogEvent[]>(EVENTS_KEY, []);
+  await writeCache(EVENTS_KEY, [...events, event]);
+  notifyDataChanged();
 }
 
 export async function removeEvent(eventId: string): Promise<void> {
-  const events = await readCache<LogEvent[]>(EVENTS_KEY, []);
-  await writeCache(
-    EVENTS_KEY,
-    events.filter((event) => event.id !== eventId)
-  );
-  notifyDataChanged();
-
   try {
     const session = await requireSession();
     const { error } = await clientFor(session)
@@ -359,16 +352,16 @@ export async function removeEvent(eventId: string): Promise<void> {
   } catch {
     // offline
   }
-}
 
-export async function updateEvent(event: LogEvent): Promise<void> {
   const events = await readCache<LogEvent[]>(EVENTS_KEY, []);
   await writeCache(
     EVENTS_KEY,
-    events.map((item) => (item.id === event.id ? event : item))
+    events.filter((event) => event.id !== eventId)
   );
   notifyDataChanged();
+}
 
+export async function updateEvent(event: LogEvent): Promise<void> {
   try {
     const session = await requireSession();
     const { error } = await clientFor(session)
@@ -383,6 +376,13 @@ export async function updateEvent(event: LogEvent): Promise<void> {
   } catch {
     // offline
   }
+
+  const events = await readCache<LogEvent[]>(EVENTS_KEY, []);
+  await writeCache(
+    EVENTS_KEY,
+    events.map((item) => (item.id === event.id ? event : item))
+  );
+  notifyDataChanged();
 }
 
 export async function loadActivities(): Promise<Activity[]> {
@@ -418,10 +418,6 @@ export async function loadActivities(): Promise<Activity[]> {
 }
 
 export async function addActivity(activity: Activity): Promise<void> {
-  const activities = await readCache<Activity[]>(ACTIVITIES_KEY, []);
-  await writeCache(ACTIVITIES_KEY, [...activities, activity]);
-  notifyDataChanged();
-
   try {
     const session = await requireSession();
     const { error } = await clientFor(session)
@@ -434,16 +430,13 @@ export async function addActivity(activity: Activity): Promise<void> {
   } catch {
     // offline
   }
+
+  const activities = await readCache<Activity[]>(ACTIVITIES_KEY, []);
+  await writeCache(ACTIVITIES_KEY, [...activities, activity]);
+  notifyDataChanged();
 }
 
 export async function removeActivity(activityId: string): Promise<void> {
-  const activities = await readCache<Activity[]>(ACTIVITIES_KEY, []);
-  await writeCache(
-    ACTIVITIES_KEY,
-    activities.filter((activity) => activity.id !== activityId)
-  );
-  notifyDataChanged();
-
   try {
     const session = await requireSession();
     const { error } = await clientFor(session)
@@ -458,6 +451,13 @@ export async function removeActivity(activityId: string): Promise<void> {
   } catch {
     // offline
   }
+
+  const activities = await readCache<Activity[]>(ACTIVITIES_KEY, []);
+  await writeCache(
+    ACTIVITIES_KEY,
+    activities.filter((activity) => activity.id !== activityId)
+  );
+  notifyDataChanged();
 }
 
 // ---------- Dziecko i członkowie ----------
@@ -584,16 +584,6 @@ function stripSignedPhotoUrl(photoUri: string | undefined): string | null {
 }
 
 export async function addChildMember(member: Member): Promise<void> {
-  const child = await readCachedChild();
-
-  if (child) {
-    await writeCache(CHILD_KEY, {
-      ...child,
-      members: [...child.members, member],
-    });
-  }
-  notifyDataChanged();
-
   try {
     const session = await requireSession();
     const { data, error } = await clientFor(session)
@@ -608,6 +598,8 @@ export async function addChildMember(member: Member): Promise<void> {
 
     const row = data as unknown as MemberRow;
 
+    const child = await readCachedChild();
+
     if (child) {
       await writeCache(CHILD_KEY, {
         ...child,
@@ -618,21 +610,20 @@ export async function addChildMember(member: Member): Promise<void> {
       });
     }
   } catch {
-    // offline
+    // offline — zmiana tylko w cache
+    const child = await readCachedChild();
+
+    if (child) {
+      await writeCache(CHILD_KEY, {
+        ...child,
+        members: [...child.members, member],
+      });
+    }
   }
+  notifyDataChanged();
 }
 
 export async function removeChildMember(memberId: string): Promise<void> {
-  const child = await readCachedChild();
-
-  if (child) {
-    await writeCache(CHILD_KEY, {
-      ...child,
-      members: child.members.filter((m) => m.id !== memberId),
-    });
-    notifyDataChanged();
-  }
-
   try {
     const session = await requireSession();
     const { error } = await clientFor(session)
@@ -647,6 +638,16 @@ export async function removeChildMember(memberId: string): Promise<void> {
   } catch {
     // offline
   }
+
+  const child = await readCachedChild();
+
+  if (child) {
+    await writeCache(CHILD_KEY, {
+      ...child,
+      members: child.members.filter((m) => m.id !== memberId),
+    });
+  }
+  notifyDataChanged();
 }
 
 // ---------- Wiele dzieci ----------
@@ -780,10 +781,6 @@ export async function loadPlans(): Promise<Plan[]> {
 }
 
 export async function addPlan(plan: Plan): Promise<void> {
-  const plans = await readCache<Plan[]>(PLANS_KEY, []);
-  await writeCache(PLANS_KEY, [...plans, plan]);
-  notifyDataChanged();
-
   try {
     const session = await requireSession();
     const { error } = await clientFor(session)
@@ -796,16 +793,13 @@ export async function addPlan(plan: Plan): Promise<void> {
   } catch {
     // offline
   }
+
+  const plans = await readCache<Plan[]>(PLANS_KEY, []);
+  await writeCache(PLANS_KEY, [...plans, plan]);
+  notifyDataChanged();
 }
 
 export async function removePlan(planId: string): Promise<void> {
-  const plans = await readCache<Plan[]>(PLANS_KEY, []);
-  await writeCache(
-    PLANS_KEY,
-    plans.filter((plan) => plan.id !== planId)
-  );
-  notifyDataChanged();
-
   try {
     const session = await requireSession();
     const { error } = await clientFor(session)
@@ -820,6 +814,13 @@ export async function removePlan(planId: string): Promise<void> {
   } catch {
     // offline
   }
+
+  const plans = await readCache<Plan[]>(PLANS_KEY, []);
+  await writeCache(
+    PLANS_KEY,
+    plans.filter((plan) => plan.id !== planId)
+  );
+  notifyDataChanged();
 }
 
 // ---------- Konto (lokalne, mock Google) ----------

@@ -319,7 +319,7 @@ declare
 begin
   select * into v_child
   from public.children c
-  where upper(replace(c.share_code, ' ', '')) = upper(replace(trim(p_code), ' '));
+  where upper(replace(c.share_code, ' ', '')) = upper(replace(trim(p_code), ' ', ''));
 
   if not found then
     raise exception 'NIEZNANY_KOD';
@@ -350,8 +350,9 @@ returns table (
   out_secret uuid
 )
 language sql
+stable
 security definer
-set search_path = stable
+set search_path = public
 as $$
   select
     c.id, c.name, c.share_code, m.id, m.secret

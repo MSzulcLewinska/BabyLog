@@ -118,9 +118,9 @@ export default function HomeScreen() {
               </Pressable>
               <Pressable
                 style={styles.roundButton}
-                onPress={() => router.push('/(tabs)/history' as Href)}
+                onPress={() => router.push('/plans' as Href)}
               >
-                <Text style={styles.calendarIcon}>▣</Text>
+                <Text style={styles.bellIcon}>🔔</Text>
               </Pressable>
             </View>
           </View>
@@ -231,28 +231,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     backgroundColor: Palette.greenSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
   avatarText: {
-    fontSize: 26,
+    fontSize: 38,
     fontWeight: '700',
     color: Palette.greenDark,
   },
   babyName: {
-    fontSize: 19,
+    fontSize: 22,
     fontWeight: '700',
     color: Palette.text,
   },
   date: {
-    fontSize: 12,
+    fontSize: 13,
     color: Palette.textSecondary,
-    marginTop: 3,
+    marginTop: 4,
   },
   calendarButton: {
     width: 42,
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     color: Palette.green,
     fontWeight: '600',
   },
-  calendarIcon: {
+  bellIcon: {
     fontSize: 22,
     color: Palette.green,
   },
