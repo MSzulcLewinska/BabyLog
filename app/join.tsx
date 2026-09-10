@@ -5,7 +5,8 @@ import { FormHero } from '@/components/form-hero';
 import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
 import { useAppState } from '@/hooks/use-app-state';
-import { joinByCode } from '@/lib/storage';
+import { findChildByCode, joinByCode, switchChild } from '@/lib/storage';
+import { loadSessions } from '@/lib/supabase';
 import { router, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
@@ -31,6 +32,35 @@ export default function JoinScreen() {
     }
     setJoining(true);
     try {
+      const found = await findChildByCode(typedCode);
+
+      if (found) {
+        const sessions = await loadSessions();
+        const existing = sessions.find(
+          (session) => session.childId === found.childId
+        );
+
+        if (existing) {
+          Alert.alert(
+            'Jesteś już zalogowany',
+            `To dziecko (${found.childName}) jest już na Twoim telefonie. Chcesz przełączyć się na ten profil?`,
+            [
+              { text: 'Zostaw', style: 'cancel' },
+              {
+                text: 'Przełącz',
+                onPress: () => {
+                  void switchChild(found.childId).then(() =>
+                    router.replace('/(tabs)' as Href)
+                  );
+                },
+              },
+            ]
+          );
+          setJoining(false);
+          return;
+        }
+      }
+
       const childName = await joinByCode(
         typedCode,
         memberName,

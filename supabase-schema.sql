@@ -325,9 +325,40 @@ begin
     raise exception 'NIEZNANY_KOD';
   end if;
 
-  insert into public.members (child_id, name, role, email)
-  values (v_child.id, trim(p_name), 'member', nullif(trim(p_email), ''))
-  returning * into v_member;
+  -- Ponowne dołączenie: zamiast tworzyć duplikat, przywracane jest istniejące
+  -- konto (z zachowaniem roli, np. 'owner'). Najpierw po e-mailu (wariant
+  -- jednoznaczny), potem — gdy brak e-maila — po imieniu, ale tylko jeśli
+  -- istnieje dokładnie jeden członek o takim imieniu w tym dziecku.
+  if nullif(trim(p_email), '') is not null then
+    select * into v_member
+    from public.members m
+    where m.child_id = v_child.id
+      and lower(m.email) = lower(trim(p_email))
+    order by m.created_at desc
+    limit 1;
+  end if;
+
+  if v_member.id is null then
+    select * into v_member
+    from public.members m
+    where m.child_id = v_child.id
+      and m.name = trim(p_name)
+      and (select count(*) from public.members m2
+           where m2.child_id = v_child.id and m2.name = trim(p_name)) = 1
+    limit 1;
+  end if;
+
+  if v_member.id is null then
+    insert into public.members (child_id, name, role, email)
+    values (v_child.id, trim(p_name), 'member', nullif(trim(p_email), ''))
+    returning * into v_member;
+  else
+    -- Odświeżamy dane osoby po ponownym dołączeniu (np. imię).
+    update public.members m
+    set name = trim(p_name),
+        email = coalesce(nullif(trim(p_email), ''), m.email)
+    where m.id = v_member.id;
+  end if;
 
   return query
     select v_child.id, v_child.name, v_member.id, v_member.secret;
@@ -336,6 +367,27 @@ $$;
 
 revoke all on function public.join_by_code (text, text, text) from public;
 grant execute on function public.join_by_code (text, text, text) to anon, authenticated;
+
+-- Tylko sprawdzenie kodu (bez tworzenia członka) — żeby móc powiadomić,
+-- że użytkownik jest już zalogowany na tym dziecku.
+
+create or replace function public.find_child_by_code (p_code text)
+returns table (
+  out_child_id uuid,
+  out_child_name text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select c.id, c.name
+  from public.children c
+  where upper(replace(c.share_code, ' ', '')) = upper(replace(trim(p_code), ' ', ''));
+$$;
+
+revoke all on function public.find_child_by_code (text) from public;
+grant execute on function public.find_child_by_code (text) to anon, authenticated;
 
 -- ---------- Przywracanie konta po wylogowaniu ----------
 -- Pozwala zalogować się ponownie na urządzeniu, które już wcześniej miało

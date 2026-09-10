@@ -1124,6 +1124,30 @@ export async function createChildWithOwner(
   return profile;
 }
 
+export async function findChildByCode(
+  code: string
+): Promise<{ childId: string; childName: string } | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await getSupabase(null).rpc('find_child_by_code', {
+    p_code: code.trim(),
+  });
+
+  if (error) {
+    return null;
+  }
+
+  const result = Array.isArray(data) ? data[0] : data;
+
+  if (!result) {
+    return null;
+  }
+
+  return { childId: result.out_child_id, childName: result.out_child_name };
+}
+
 export async function joinByCode(
   code: string,
   memberName: string,

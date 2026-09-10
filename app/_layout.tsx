@@ -39,7 +39,7 @@ function RootNavigator() {
 
     const current = segments[0] as string;
     const onAuthScreen =
-      current === 'login' || current === 'login-email' || current === 'setup-child' || current === 'join' || current === 'consent';
+      current === 'login' || current === 'login-email' || current === 'setup-child' || current === 'consent';
 
     if (!signedIn) {
       if (current !== 'login' && current !== 'login-email' && current !== 'join') {
