@@ -14,6 +14,7 @@ import {
   migrateLocalToCloud,
   saveUser,
   signOut as storageSignOut,
+  syncAccountEmailToAll,
 } from '@/lib/storage';
 import { loadSession, saveSession } from '@/lib/supabase';
 import type { UserAccount } from '@/lib/types';
@@ -125,6 +126,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     ]);
 
     if (session || child) {
+      if (account.email) {
+        try {
+          await syncAccountEmailToAll(account.email);
+        } catch {
+          // best effort — pełna informacja na ekranie Moje konto
+        }
+      }
       setOnboarded(true);
       return;
     }

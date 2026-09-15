@@ -861,6 +861,22 @@ export async function syncAccountEmail(email: string): Promise<void> {
   }
 }
 
+export async function syncAccountEmailToAll(email: string): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    return;
+  }
+
+  const sessions = await loadSessions();
+  for (const session of sessions) {
+    const { error } = await clientFor(session).rpc('update_member_email', {
+      p_email: email.trim(),
+    });
+    if (error) {
+      throw new Error('Nie udało się zaktualizować e-maila w chmurze.');
+    }
+  }
+}
+
 export async function hasAcceptedPrivacy(): Promise<boolean> {
   const user = await loadUser();
   return Boolean(user?.privacyAccepted);
