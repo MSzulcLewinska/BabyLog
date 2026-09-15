@@ -3,7 +3,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import { TemperatureChart } from '@/components/temperature-chart';
 import { Palette } from '@/constants/theme';
 import { useLiveData } from '@/hooks/use-live-data';
-import { formatLongDate, parseDateKey } from '@/lib/dates';
+import { formatDurationMinutes, formatLongDate, minutesBetweenTimes, parseDateKey } from '@/lib/dates';
 import { loadEvents, removeEvent } from '@/lib/storage';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -74,7 +74,14 @@ export default function EventDetailScreen() {
       value: formatLongDate(parseDateKey(event.date)),
     });
   }
-  if (event.amount && event.unit) {
+  if (event.activityId === 'sleep' && event.endTime) {
+    detailRows.push({
+      label: 'Czas snu',
+      value: formatDurationMinutes(
+        minutesBetweenTimes(event.time, event.endTime)
+      ),
+    });
+  } else if (event.amount && event.unit) {
     detailRows.push({ label: 'Wartość', value: `${event.amount} ${event.unit}` });
   } else if (event.amount) {
     detailRows.push({ label: 'Wartość', value: event.amount });

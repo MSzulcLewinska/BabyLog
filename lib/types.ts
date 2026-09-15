@@ -14,6 +14,7 @@ export type LogEvent = {
   notes?: string;
   dropKind?: string;
   feverMedication?: 'ibuprofen' | 'paracetamol';
+  endTime?: string;
   author?: string;
 };
 

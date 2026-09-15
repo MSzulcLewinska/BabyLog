@@ -172,6 +172,8 @@ type EventRow = {
   unit: string | null;
   notes: string | null;
   drop_kind: string | null;
+  fever_medication: string | null;
+  end_time: string | null;
   author: string | null;
 };
 
@@ -218,6 +220,10 @@ function rowToEvent(row: EventRow): LogEvent {
     unit: row.unit ?? undefined,
     notes: row.notes ?? undefined,
     dropKind: row.drop_kind ?? undefined,
+    feverMedication: row.fever_medication
+      ? (row.fever_medication as 'ibuprofen' | 'paracetamol')
+      : undefined,
+    endTime: row.end_time ?? undefined,
     author: row.author ?? undefined,
   };
 }
@@ -268,6 +274,8 @@ function eventToRow(event: LogEvent, childId: string): EventRow {
     unit: event.unit ?? null,
     notes: event.notes ?? null,
     drop_kind: event.dropKind ?? null,
+    fever_medication: event.feverMedication ?? null,
+    end_time: event.endTime ?? null,
     author: event.author ?? null,
   };
 }
@@ -834,6 +842,25 @@ export async function saveUser(user: UserAccount): Promise<void> {
   notifyDataChanged();
 }
 
+export async function syncAccountEmail(email: string): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    return;
+  }
+
+  const session = await loadSession();
+  if (!session) {
+    return;
+  }
+
+  const { error } = await clientFor(session).rpc('update_member_email', {
+    p_email: email.trim(),
+  });
+
+  if (error) {
+    throw new Error('Nie udało się zaktualizować e-maila w chmurze.');
+  }
+}
+
 export async function hasAcceptedPrivacy(): Promise<boolean> {
   const user = await loadUser();
   return Boolean(user?.privacyAccepted);
@@ -1061,7 +1088,7 @@ export async function createChildWithOwner(
     const { data, error } = await db.rpc('create_child_with_owner', {
       p_child_name: childName.trim(),
       p_share_code: generateShareCode(childName),
-      p_owner_name: ownerName.trim() || 'Właściciel',
+      p_owner_name: ownerName.trim() || 'Rodzic',
       p_owner_email: ownerEmail ?? null,
       p_photo_uri: photoUri?.startsWith('file://') ? null : photoUri ?? null,
     });
@@ -1080,7 +1107,7 @@ export async function createChildWithOwner(
     throw new Error('Nie udało się utworzyć profilu dziecka.');
   }
 
-  const ownerDisplayName = ownerName.trim() || 'Właściciel';
+  const ownerDisplayName = ownerName.trim() || 'Rodzic';
 
   const deviceSession: DeviceSession = {
     childId: result.out_child_id,
@@ -1237,7 +1264,7 @@ export async function migrateLocalToCloud(ownerFallback: string, ownerEmail?: st
   const ownerName =
     localChild?.members.find((m) => m.role === 'owner')?.name ||
     ownerFallback ||
-    'Właściciel';
+'Rodzic';
 
   try {
     const db = getSupabase(null);

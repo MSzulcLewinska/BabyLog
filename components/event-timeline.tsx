@@ -1,4 +1,5 @@
 import { Palette } from '@/constants/theme';
+import { formatDurationMinutes, minutesBetweenTimes } from '@/lib/dates';
 import type { LogEvent } from '@/lib/types';
 import {
   Pressable,
@@ -48,7 +49,11 @@ export function EventTimeline({
               )}
             </View>
             <Text style={styles.value}>
-              {event.amount && event.unit
+              {event.activityId === 'sleep' && event.endTime
+                ? formatDurationMinutes(
+                    minutesBetweenTimes(event.time, event.endTime)
+                  )
+                : event.amount && event.unit
                 ? `${event.amount} ${event.unit}`
                 : event.amount || ''}
             </Text>

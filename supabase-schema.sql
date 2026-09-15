@@ -55,6 +55,8 @@ create table if not exists public.events (
   unit text,
   notes text,
   drop_kind text,
+  fever_medication text,
+  end_time text,
   author text,
   created_at timestamptz not null default now(),
   primary key (id, child_id)
@@ -286,7 +288,7 @@ begin
   values (
     v_child.id,
     case when coalesce(trim(p_owner_name), '') = ''
-      then 'Właściciel' else trim(p_owner_name) end,
+      then 'Rodzic' else trim(p_owner_name) end,
     'owner',
     nullif(trim(p_owner_email), '')
   )
@@ -602,3 +604,51 @@ $$;
 
 revoke all on function public.update_member_role (uuid, text) from public;
 grant execute on function public.update_member_role (uuid, text) to anon, authenticated;
+
+-- ---------- Aktualizacja e-maila członka ----------
+-- Pozwala podpiąć/zmienić adres e-mail zalogowanego konta (potrzebny do
+-- logowania na innym telefonie). Dla właściciela aktualizowany jest także
+-- pole owner_email (używane przy odzyskiwaniu dostępu).
+
+create or replace function public.update_member_email (p_email text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_member_id uuid;
+  v_role text;
+begin
+  select m.id, m.role into v_member_id, v_role
+  from public.members m
+  where m.id::text = coalesce(
+    current_setting('request.headers', true)::json ->> 'x-member-id', ''
+  )
+  and m.secret::text = coalesce(
+    current_setting('request.headers', true)::json ->> 'x-member-secret', ''
+  );
+
+  if v_member_id is null then
+    raise exception 'BRAK_SESJI';
+  end if;
+
+  update public.members m
+  set email = nullif(trim(p_email), ''),
+      owner_email = case
+        when v_role = 'owner' then nullif(trim(p_email), '')
+        else m.owner_email
+      end
+  where m.id = v_member_id;
+end;
+$$;
+
+revoke all on function public.update_member_email (text) from public;
+grant execute on function public.update_member_email (text) to anon, authenticated;
+
+-- ---------- Kolumny dodatkowe w tabeli events ----------
+-- fever_medication: czy przy temperaturze podano ibuprofen / paracetamol
+-- end_time: godzina zakończenia (np. drzemki/snu)
+
+alter table public.events add column if not exists fever_medication text;
+alter table public.events add column if not exists end_time text;

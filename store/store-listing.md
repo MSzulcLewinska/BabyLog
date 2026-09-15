@@ -41,7 +41,7 @@ Zainstaluj nową wersję APK na telefonie, wejdź w aplikację i zrób zrzuty (p
 3. **Oś czasu dnia** — dzień z wpisami,
 4. **Statystyki/wykresy** — podsumowania,
 5. **Plan dnia / przypomnienia** — lista planów,
-6. **Ustawienia → Udostępnij dziecko** — ekran z kodem udostępniania (bez podawania prawdziwego kodu zrzut lepiej zamazać, jeśli używasz tego samego telefonu),
+6. **Ustawienia → Udostępnij kod dziecka** — ekran z kodem udostępniania (bez podawania prawdziwego kodu zrzut lepiej zamazać, jeśli używasz tego samego telefonu),
 7. Możesz dodać widok **członków**.
 
 Wskazówki: szerokość co najmniej 1080 px, ekran w pionie, bez powiadomień systemowych na górze.

@@ -1,27 +1,38 @@
+import KeyboardAwareForm from '@/components/KeyboardAwareForm';
+import { FormField } from '@/components/form-field';
+import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
 import { useAppState } from '@/hooks/use-app-state';
 import { router, type Href } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { signIn } = useAppState();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const handleGoogleLogin = async () => {
+  const handleRegister = async () => {
     if (busy) return;
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedName) {
+      Alert.alert('Podaj imię', 'Wpisz swoje imię, żeby utworzyć konto.');
+      return;
+    }
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      Alert.alert(
+        'Podaj e-mail',
+        'E-mail jest wymagany, aby konto można było połączyć z dzieckiem i zalogować się na innym telefonie.'
+      );
+      return;
+    }
     setBusy(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 700));
-      await signIn();
+      await signIn({ name: trimmedName, email: trimmedEmail });
       // Nawigacją zajmuje się _layout.tsx na podstawie stanu signedIn/onboarded
     } finally {
       setBusy(false);
@@ -30,54 +41,59 @@ export default function LoginScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <View style={styles.content}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoEmoji}>🍼</Text>
+      <KeyboardAwareForm>
+        <View style={styles.content}>
+          <View style={styles.logoCircle}>
+            <Text style={styles.logoEmoji}>🍼</Text>
+          </View>
+          <Text style={styles.title}>BabyLog</Text>
+          <Text style={styles.subtitle}>
+            Dziennik karmień, pieluch i ważnych chwil Twojego malucha
+          </Text>
+
+          <FormField
+            label="Twoje imię"
+            value={name}
+            onChangeText={setName}
+            placeholder="np. Magda"
+            autoCapitalize="words"
+          />
+          <FormField
+            label="Adres e-mail"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="np. magda@gmail.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+          />
+          <PrimaryButton
+            label={busy ? 'Rejestrowanie...' : 'UTWÓRZ KONTO'}
+            onPress={() => void handleRegister()}
+          />
+
+          <Text style={styles.joinHint}>Masz już konto?</Text>
+          <Pressable
+            style={({ pressed }) => [styles.joinButton, pressed && { opacity: 0.7 }]}
+            onPress={() => router.push('/login-email' as Href)}
+          >
+            <Text style={styles.joinLabel}>Zaloguj się mailem →</Text>
+          </Pressable>
+
+          <Text style={styles.joinHint}>Druga osoba z rodziny?</Text>
+          <Pressable
+            style={({ pressed }) => [styles.joinButton, pressed && { opacity: 0.7 }]}
+            onPress={() => router.push('/join' as Href)}
+          >
+            <Text style={styles.joinLabel}>Dołącz kodem dziecka →</Text>
+          </Pressable>
+
+          <Text style={styles.note}>
+            E-mail jest niezbędny do połączenia dziecka z rodzicami i logowania na
+            innym telefonie
+          </Text>
         </View>
-        <Text style={styles.title}>BabyLog</Text>
-        <Text style={styles.subtitle}>
-          Dziennik karmień, pieluch i ważnych chwil Twojego malucha
-        </Text>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.googleButton,
-            busy && styles.googleButtonDisabled,
-            pressed && styles.googleButtonPressed,
-          ]}
-          onPress={handleGoogleLogin}
-          disabled={busy}
-        >
-          {busy ? (
-            <ActivityIndicator size="small" color={Palette.textSecondary} />
-          ) : (
-            <>
-              <Text style={styles.googleIcon}>👤</Text>
-              <Text style={styles.googleLabel}>Utwórz konto lokalne</Text>
-            </>
-          )}
-        </Pressable>
-
-        <Text style={styles.joinHint}>Masz już konto?</Text>
-        <Pressable
-          style={({ pressed }) => [styles.joinButton, pressed && { opacity: 0.7 }]}
-          onPress={() => router.push('/login-email' as Href)}
-        >
-          <Text style={styles.joinLabel}>Zaloguj się mailem →</Text>
-        </Pressable>
-
-        <Text style={styles.joinHint}>Druga osoba z rodziny?</Text>
-        <Pressable
-          style={({ pressed }) => [styles.joinButton, pressed && { opacity: 0.7 }]}
-          onPress={() => router.push('/join' as Href)}
-        >
-          <Text style={styles.joinLabel}>Dołącz kodem dziecka →</Text>
-        </Pressable>
-
-        <Text style={styles.note}>
-          Dane są bezpiecznie przechowywane w chmurze
-        </Text>
-      </View>
+      </KeyboardAwareForm>
     </View>
   );
 }
@@ -88,76 +104,48 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.background,
   },
   content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: 18,
+    paddingBottom: 24,
   },
   logoCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     backgroundColor: Palette.greenSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 12,
   },
   logoEmoji: {
-    fontSize: 44,
+    fontSize: 40,
   },
   title: {
-    fontSize: 34,
+    fontSize: 32,
     fontWeight: '800',
     color: Palette.text,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 15,
     color: Palette.textSecondary,
     textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 40,
+    marginTop: 8,
+    marginBottom: 18,
     lineHeight: 22,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Palette.border,
-    minHeight: 54,
-    alignSelf: 'stretch',
-    shadowColor: '#000000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  googleButtonPressed: {
-    opacity: 0.85,
-  },
-  googleButtonDisabled: {
-    opacity: 0.6,
-  },
-  googleIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  googleLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Palette.text,
   },
   joinHint: {
     fontSize: 13,
     color: Palette.textMuted,
-    marginTop: 28,
+    marginTop: 24,
+    textAlign: 'center',
   },
   joinButton: {
     marginTop: 8,
     paddingVertical: 10,
     paddingHorizontal: 20,
+    alignItems: 'center',
   },
   joinLabel: {
     fontSize: 15,
@@ -167,7 +155,7 @@ const styles = StyleSheet.create({
   note: {
     fontSize: 12,
     color: Palette.textMuted,
-    marginTop: 24,
+    marginTop: 20,
     textAlign: 'center',
   },
 });

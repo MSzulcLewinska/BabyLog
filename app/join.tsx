@@ -75,7 +75,7 @@ export default function JoinScreen() {
     } catch (error) {
       const message =
         error instanceof Error && error.message === 'NIEZNANY_KOD'
-          ? 'Sprawdź kod na ekranie Udostępnij u właściciela dziennika.'
+          ? 'Sprawdź kod na ekranie „Udostępnij kod dziecka" u rodzica.'
           : 'Nie udało się połączyć. Sprawdź internet i spróbuj ponownie.';
       Alert.alert('Błąd', message);
     } finally {
@@ -116,7 +116,7 @@ export default function JoinScreen() {
             Podaj e-mail, żeby móc zalogować się na innym telefonie bez kodu.
           </Text>
           <Text style={styles.hint}>
-            Kod znajdziesz w aplikacji właściciela: Ustawienia → Udostępnij
+            Kod znajdziesz w aplikacji rodzica: Ustawienia → Udostępnij kod dziecka
           </Text>
           <PrimaryButton
             label={joining ? 'Dołączanie...' : 'DOŁĄCZ'}

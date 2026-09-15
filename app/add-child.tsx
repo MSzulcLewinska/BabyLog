@@ -33,7 +33,7 @@ export default function AddChildScreen() {
       await createChildWithOwner(
         name.trim(),
         photoUri ?? undefined,
-        user?.name?.trim() || 'Właściciel',
+        user?.name?.trim() || 'Rodzic',
         user?.email,
       );
       router.replace('/(tabs)' as Href);

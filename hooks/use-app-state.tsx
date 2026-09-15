@@ -63,7 +63,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       if (!session && user) {
         // Stare dane lokalne (przed Supabase) — jednorazowa migracja do chmury
-        await migrateLocalToCloud(user.name || 'Właściciel', user.email);
+        await migrateLocalToCloud(user.name || 'Rodzic', user.email);
       }
 
       const finalSession = session ?? (await loadSession());
@@ -158,7 +158,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       await createChildWithOwner(
         name.trim(),
         photoUri,
-        userName.trim() || 'Właściciel',
+        userName.trim() || 'Rodzic',
         user?.email,
       );
       void registerPushToken();

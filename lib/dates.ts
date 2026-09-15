@@ -17,6 +17,25 @@ export function formatTime(date: Date): string {
   });
 }
 
+export function minutesBetweenTimes(start: string, end: string): number {
+  const toMinutes = (value: string) => {
+    const [hours, minutes] = value.split(':').map(Number);
+    return (hours ?? 0) * 60 + (minutes ?? 0);
+  };
+  const diff = toMinutes(end) - toMinutes(start);
+  if (diff === 0) return 0;
+  return diff < 0 ? diff + 24 * 60 : diff;
+}
+
+export function formatDurationMinutes(totalMinutes: number): string {
+  const safe = Math.max(0, Math.round(totalMinutes));
+  const hours = Math.floor(safe / 60);
+  const minutes = safe % 60;
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} h`;
+  return `${hours} h ${minutes} min`;
+}
+
 export function formatLongDate(date: Date): string {
   return date.toLocaleDateString('pl-PL', {
     day: 'numeric',

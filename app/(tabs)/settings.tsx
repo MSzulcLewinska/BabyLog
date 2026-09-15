@@ -228,7 +228,7 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <SettingsRow
             icon="🔗"
-            label="Udostępnij dziecko"
+            label="Udostępnij kod dziecka"
             onPress={() => router.push('/share' as Href)}
           />
           <SettingsRow
@@ -310,7 +310,7 @@ function MemberRowOwner({
       </View>
       <View style={styles.rowTexts}>
         <Text style={styles.rowLabel}>{member.name}</Text>
-        <Text style={styles.rowSub}>Właściciel</Text>
+        <Text style={styles.rowSub}>Rodzic</Text>
       </View>
     </View>
   );

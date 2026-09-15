@@ -6,7 +6,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import { TimeField } from '@/components/time-field';
 import { Palette } from '@/constants/theme';
 import { useLiveData } from '@/hooks/use-live-data';
-import { formatTime, toDateKey } from '@/lib/dates';
+import { formatDurationMinutes, formatTime, minutesBetweenTimes, toDateKey } from '@/lib/dates';
 import {
   addEvent,
   loadActivities,
@@ -54,6 +54,7 @@ export default function LogScreen() {
   const liveActivities = useLiveData(loadActivities);
   const liveEvents = useLiveData(loadEvents);
   const [time, setTime] = useState(new Date());
+  const [endTime, setEndTime] = useState<Date | null>(null);
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [dropKind, setDropKind] = useState(params.dropKind || 'vitamin-d');
@@ -82,9 +83,16 @@ export default function LogScreen() {
     if (editingEvent.feverMedication) {
       setFeverMed(editingEvent.feverMedication as FeverMed);
     }
+    if (editingEvent.endTime) {
+      const [hours, minutes] = editingEvent.endTime.split(':').map(Number);
+      const d = new Date();
+      d.setHours(hours ?? 0, minutes ?? 0, 0, 0);
+      setEndTime(d);
+    }
   }, [editingEvent]);
 
   const isTemperature = params.activityId === 'temperature';
+  const isSleep = params.activityId === 'sleep';
 
   const activity = useMemo(
     () =>
@@ -109,6 +117,28 @@ export default function LogScreen() {
       return;
     }
 
+    if (!isSleep && kind === 'custom' && meta.unit && !amount.trim()) {
+      Alert.alert('Podaj wartość', `Wpisz wartość w ${meta.unit}.`);
+      return;
+    }
+
+    if (isSleep && !endTime) {
+      Alert.alert(
+        'Podaj godzinę zakończenia',
+        'Wybierz, do której godziny dziecko spało.'
+      );
+      return;
+    }
+
+    const sleepMinutes =
+      isSleep && endTime
+        ? minutesBetweenTimes(formatTime(time), formatTime(endTime))
+        : null;
+    const amountForSave =
+      isSleep && sleepMinutes !== null
+        ? String(sleepMinutes)
+        : amount.trim() || undefined;
+
     const selectedDrop = DROP_OPTIONS.find((item) => item.id === dropKind);
     const titleForEvent =
       kind === 'drops' ? selectedDrop?.label ?? 'Krople' : meta.name;
@@ -131,8 +161,9 @@ export default function LogScreen() {
           icon: meta.icon,
           color: meta.color,
           time: formatTime(time),
-          amount: amount.trim() || undefined,
-          unit: kind === 'drops' || kind === 'poop' ? undefined : meta.unit,
+          endTime: isSleep && endTime ? formatTime(endTime) : undefined,
+          amount: amountForSave,
+          unit: isSleep ? 'min' : kind === 'drops' || kind === 'poop' ? undefined : meta.unit,
           notes: notes.trim() || undefined,
           dropKind: kind === 'drops' ? dropKind : undefined,
           feverMedication: isTemperature && feverMed ? feverMed : undefined,
@@ -147,8 +178,9 @@ export default function LogScreen() {
           color: meta.color,
           time: formatTime(time),
           date: toDateKey(new Date()),
-          amount: amount.trim() || undefined,
-          unit: kind === 'drops' || kind === 'poop' ? undefined : meta.unit,
+          endTime: isSleep && endTime ? formatTime(endTime) : undefined,
+          amount: amountForSave,
+          unit: isSleep ? 'min' : kind === 'drops' || kind === 'poop' ? undefined : meta.unit,
           notes: notes.trim() || undefined,
           dropKind: kind === 'drops' ? dropKind : undefined,
           feverMedication: isTemperature && feverMed ? feverMed : undefined,
@@ -197,7 +229,24 @@ export default function LogScreen() {
             </View>
           )}
 
-          <TimeField value={time} onChange={setTime} />
+          {isSleep ? (
+            <View style={styles.sleepSection}>
+              <TimeField label="Od" value={time} onChange={setTime} />
+              <TimeField label="Do" value={endTime ?? time} onChange={setEndTime} />
+              {endTime && (
+                <View style={styles.sleepSummary}>
+                  <Text style={styles.sleepSummaryText}>
+                    💤 Czas snu:{' '}
+                    {formatDurationMinutes(
+                      minutesBetweenTimes(formatTime(time), formatTime(endTime))
+                    )}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <TimeField value={time} onChange={setTime} />
+          )}
 
           {isTemperature && (
             <View style={styles.feverSection}>
@@ -222,7 +271,7 @@ export default function LogScreen() {
             </View>
           )}
 
-          {(kind === 'milk' || (kind === 'custom' && meta.unit)) && (
+          {(kind === 'milk' || (kind === 'custom' && meta.unit && !isSleep)) && (
             <FormField
               label={meta.unit ? `Ilość (${meta.unit})` : 'Wartość'}
               placeholder={meta.unit === 'ml' ? 'np. 120' : 'np. 36.6'}
@@ -353,6 +402,24 @@ const styles = StyleSheet.create({
     color: Palette.text,
   },
   feverOptionLabelSelected: {
+    color: Palette.greenDark,
+  },
+  sleepSection: {
+    marginTop: 8,
+  },
+  sleepSummary: {
+    backgroundColor: Palette.greenSoft,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Palette.greenMuted,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  sleepSummaryText: {
+    fontSize: 15,
+    fontWeight: '700',
     color: Palette.greenDark,
   },
 });

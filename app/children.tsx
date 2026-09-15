@@ -62,7 +62,7 @@ export default function ChildrenScreen() {
               <View style={styles.rowTexts}>
                 <Text style={styles.name}>{child.name}</Text>
                 <Text style={styles.role}>
-                  {child.isOwner ? 'Właściciel' : 'Opiekun'}
+                  {child.isOwner ? 'Rodzic' : 'Opiekun'}
                 </Text>
               </View>
               {child.isActive ? (

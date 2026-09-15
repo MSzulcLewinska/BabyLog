@@ -4,7 +4,7 @@ import KeyboardAwareForm from '@/components/KeyboardAwareForm';
 import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
 import { formatLongDate } from '@/lib/dates';
-import { loadUser, saveUser } from '@/lib/storage';
+import { loadUser, saveUser, syncAccountEmail } from '@/lib/storage';
 import type { UserAccount } from '@/lib/types';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -48,9 +48,21 @@ export default function EditAccountScreen() {
         name: name.trim() || undefined,
         email: email.trim() || undefined,
       });
-      Alert.alert('Zapisano', 'Dane konta zostały zaktualizowane.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+
+      let synced = true;
+      try {
+        await syncAccountEmail(email.trim() || '');
+      } catch {
+        synced = false;
+      }
+
+      Alert.alert(
+        'Zapisano',
+        synced
+          ? 'Dane konta zostały zaktualizowane. Tym e-mailem zalogujesz się na innym telefonie.'
+          : 'Dane zapisane lokalnie, ale nie udało się zsynchronizować e-maila z chmurą. Sprawdź internet i spróbuj ponownie.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
     } finally {
       setSaving(false);
     }
@@ -89,7 +101,7 @@ export default function EditAccountScreen() {
           />
 
           <FormField
-            label="E-mail (opcjonalnie)"
+            label="Adres e-mail"
             value={email}
             onChangeText={setEmail}
             placeholder="np. magda@gmail.com"

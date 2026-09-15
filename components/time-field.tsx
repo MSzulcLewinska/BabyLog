@@ -8,14 +8,15 @@ import { formatTime } from '@/lib/dates';
 type TimeFieldProps = {
   value: Date;
   onChange: (date: Date) => void;
+  label?: string;
 };
 
-export function TimeField({ value, onChange }: TimeFieldProps) {
+export function TimeField({ value, onChange, label = 'Godzina' }: TimeFieldProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <View>
-      <Text style={styles.label}>Godzina</Text>
+      <Text style={styles.label}>{label}</Text>
       <Pressable style={styles.field} onPress={() => setOpen(true)}>
         <Text style={styles.icon}>🕐</Text>
         <Text style={styles.value}>{formatTime(value)}</Text>

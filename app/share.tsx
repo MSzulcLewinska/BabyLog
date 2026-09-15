@@ -23,7 +23,7 @@ export default function ShareScreen() {
 
   return (
     <View style={styles.screen}>
-      <BackHeader title="Udostępnij dziecko" />
+      <BackHeader title="Udostępnij kod dziecka" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <Text style={styles.heroIcon}>👨‍👩‍👧</Text>
@@ -55,7 +55,7 @@ export default function ShareScreen() {
                   {member.role === 'owner' ? ' (Ty)' : ''}
                 </Text>
                 <Text style={styles.memberRole}>
-                  {member.role === 'owner' ? 'Właściciel' : 'Członek'}
+                  {member.role === 'owner' ? 'Rodzic' : 'Członek'}
                 </Text>
               </View>
             </View>
