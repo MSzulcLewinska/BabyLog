@@ -1,17 +1,36 @@
 import { Palette } from '@/constants/theme';
-import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
+import { notifyFieldFocused } from '@/lib/keyboard-focus';
+import { useRef } from 'react';
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  TextInputProps,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
 
 type FormFieldProps = TextInputProps & {
   label: string;
 };
 
-export function FormField({ label, style, multiline, ...props }: FormFieldProps) {
+export function FormField({ label, style, multiline, onFocus, ...props }: FormFieldProps) {
+  const offsetRef = useRef(0);
+
+  const handleLayout = (event: LayoutChangeEvent) => {
+    offsetRef.current = event.nativeEvent.layout.y;
+  };
+
   return (
-    <View>
+    <View onLayout={handleLayout}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         placeholderTextColor={Palette.textMuted}
         multiline={multiline}
+        onFocus={(event) => {
+          notifyFieldFocused(offsetRef.current);
+          onFocus?.(event);
+        }}
         style={[styles.input, multiline && styles.multiline, style]}
         {...props}
       />

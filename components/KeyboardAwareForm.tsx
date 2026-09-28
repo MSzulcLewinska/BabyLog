@@ -1,7 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Keyboard,
-    KeyboardAvoidingView,
     Platform,
     ScrollView,
     StyleProp,
@@ -10,62 +9,82 @@ import {
     ViewStyle,
 } from 'react-native';
 
+import { subscribeFieldFocus } from '@/lib/keyboard-focus';
+
 type KeyboardAwareFormProps = {
   children: React.ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
 };
+
+const FOCUS_MARGIN = 24;
 
 export default function KeyboardAwareForm({
   children,
   contentContainerStyle,
 }: KeyboardAwareFormProps) {
   const scrollViewRef = useRef<ScrollView>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
-    const keyboardWillShow = Keyboard.addListener(
-      Platform.OS === 'ios'
-        ? 'keyboardWillShow'
-        : 'keyboardDidShow',
-      () => {
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({
-            animated: true,
-          });
-        }, 100);
-      }
-    );
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
 
     return () => {
-      keyboardWillShow.remove();
+      showSub.remove();
+      hideSub.remove();
     };
   }, []);
 
+  // Przewijamy do pola, które właśnie zostało wybrane. Wcześniej formularz
+  // zwijał się do końca i pole imienia znikało pod klawiaturą.
+  useEffect(
+    () =>
+      subscribeFieldFocus((offset) => {
+        const target = Math.max(0, offset - FOCUS_MARGIN);
+        requestAnimationFrame(() => {
+          scrollViewRef.current?.scrollTo({ y: target, animated: true });
+        });
+      }),
+    []
+  );
+
+  const handleContentSizeChange = useCallback(() => {
+    if (keyboardHeight === 0) return;
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: false });
+    });
+  }, [keyboardHeight]);
+
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    <ScrollView
+      ref={scrollViewRef}
+      style={styles.container}
+      contentContainerStyle={[
+        styles.scrollContent,
+        { paddingBottom: keyboardHeight + 16 },
+        contentContainerStyle,
+      ]}
+      onContentSizeChange={handleContentSizeChange}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      showsVerticalScrollIndicator={false}
     >
-      <ScrollView
-        ref={scrollViewRef}
-        contentContainerStyle={[
-          styles.scrollContent,
-          contentContainerStyle,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          {children}
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <View style={styles.content}>{children}</View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardContainer: {
+  container: {
     flex: 1,
   },
 

@@ -3,10 +3,13 @@ import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
 import { useLiveData } from '@/hooks/use-live-data';
 import { loadChild } from '@/lib/storage';
+import * as Clipboard from 'expo-clipboard';
+import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
 export default function ShareScreen() {
   const child = useLiveData(loadChild);
+  const [copied, setCopied] = useState(false);
 
   const shareCode = async () => {
     if (!child) return;
@@ -16,9 +19,18 @@ export default function ShareScreen() {
     });
   };
 
-  const copyCode = () => {
+  const copyCode = async () => {
     if (!child) return;
-    Alert.alert('Kod dziecka', child.shareCode);
+    try {
+      await Clipboard.setStringAsync(child.shareCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      Alert.alert(
+        'Nie udało się skopiować',
+        'Skopiuj kod ręcznie i wyślij go drugiej osobie.'
+      );
+    }
   };
 
   return (
@@ -32,9 +44,9 @@ export default function ShareScreen() {
           Udostępnij kod, żeby druga osoba mogła dołączyć do dziennika.
         </Text>
 
-        <Pressable style={styles.codeBox} onPress={copyCode}>
+        <Pressable style={styles.codeBox} onPress={() => void copyCode()}>
           <Text style={styles.code}>{child?.shareCode ?? '—'}</Text>
-          <Text style={styles.copy}>Kopiuj</Text>
+          <Text style={styles.copy}>{copied ? '✓ Skopiowano' : 'Kopiuj'}</Text>
         </Pressable>
 
         <PrimaryButton label="UDOSTĘPNIJ KOD" onPress={shareCode} />
@@ -55,7 +67,11 @@ export default function ShareScreen() {
                   {member.role === 'owner' ? ' (Ty)' : ''}
                 </Text>
                 <Text style={styles.memberRole}>
-                  {member.role === 'owner' ? 'Rodzic' : 'Członek'}
+                  {member.role === 'owner'
+                    ? 'Rodzic'
+                    : member.role === 'observer'
+                      ? 'Obserwator (podgląd)'
+                      : 'Opiekun'}
                 </Text>
               </View>
             </View>

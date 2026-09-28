@@ -38,40 +38,64 @@ export default function ActivitiesScreen() {
         contentContainerStyle={styles.content}
       >
         <View style={styles.card}>
-          {activities.map((activity, index) => (
-            <Pressable
-              key={activity.id}
-              style={[
-                styles.row,
-                index === activities.length - 1 && styles.lastRow,
-              ]}
-              onPress={() =>
-                router.push({
-                  pathname: '/log',
-                  params: {
-                    kind: activity.kind,
-                    activityId: activity.id,
-                    ...(activity.kind === 'drops'
-                      ? { dropKind: activity.id }
-                      : {}),
-                  },
-                } as Href)
-              }
-            >
-              <View style={[styles.iconWrap, { backgroundColor: `${activity.color}22` }]}>
-                <Text style={styles.icon}>{activity.icon}</Text>
+          {activities.map((activity, index) => {
+            const isLast = index === activities.length - 1;
+            const hasMealRow = activity.kind === 'milk';
+
+            return (
+              <View key={activity.id}>
+                <Pressable
+                  style={[styles.row, isLast && styles.lastRow]}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/log',
+                      params: {
+                        kind: activity.kind,
+                        activityId: activity.id,
+                        ...(activity.kind === 'drops'
+                          ? { dropKind: activity.id }
+                          : {}),
+                      },
+                    } as Href)
+                  }
+                >
+                  <View
+                    style={[
+                      styles.iconWrap,
+                      { backgroundColor: `${activity.color}22` },
+                    ]}
+                  >
+                    <Text style={styles.icon}>{activity.icon}</Text>
+                  </View>
+                  <Text style={styles.name}>{activity.name}</Text>
+                  <Pressable
+                    hitSlop={10}
+                    style={styles.deleteWrap}
+                    onPress={() => handleDelete(activity.id, activity.name)}
+                  >
+                    <Text style={styles.deleteIcon}>🗑️</Text>
+                  </Pressable>
+                  <Text style={styles.chevron}>›</Text>
+                </Pressable>
+
+                {hasMealRow && (
+                  <Pressable
+                    style={[styles.row, isLast && styles.lastRow]}
+                    onPress={() => router.push('/add-meal' as Href)}
+                  >
+                    <View
+                      style={[styles.iconWrap, { backgroundColor: '#F59E0B22' }]}
+                    >
+                      <Text style={styles.icon}>🍽️</Text>
+                    </View>
+                    <Text style={styles.name}>Dodaj posiłek</Text>
+                    <Text style={styles.mealHint}>BLW</Text>
+                    <Text style={styles.chevron}>›</Text>
+                  </Pressable>
+                )}
               </View>
-              <Text style={styles.name}>{activity.name}</Text>
-              <Pressable
-                hitSlop={10}
-                style={styles.deleteWrap}
-                onPress={() => handleDelete(activity.id, activity.name)}
-              >
-                <Text style={styles.deleteIcon}>🗑️</Text>
-              </Pressable>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          ))}
+            );
+          })}
         </View>
 
         <Pressable
@@ -79,13 +103,6 @@ export default function ActivitiesScreen() {
           onPress={() => router.push('/add-activity' as Href)}
         >
           <Text style={styles.addText}>＋  Dodaj czynność</Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.addButton, styles.dietButton]}
-          onPress={() => router.push('/diet' as Href)}
-        >
-          <Text style={styles.addText}>🍎  Dieta (BLW)</Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -136,6 +153,16 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: Palette.text,
   },
+  mealHint: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#B45309',
+    backgroundColor: '#FFF4E5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
   deleteWrap: {
     marginRight: 12,
     padding: 2,
@@ -157,10 +184,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Palette.card,
-  },
-  dietButton: {
-    marginTop: 10,
-    borderColor: '#F59E0B',
   },
   addText: {
     color: Palette.greenDark,

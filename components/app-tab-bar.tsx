@@ -6,12 +6,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const TABS = [
-  { key: 'index', label: 'Dzisiaj', icon: '⌂' },
-  { key: 'history', label: 'Historia', icon: '◷' },
+  { key: 'index', label: 'Dzisiaj', icon: '🏠' },
+  { key: 'history', label: 'Historia', icon: '🗓️' },
   { key: 'add', label: '', icon: '+' },
-  { key: 'stats', label: 'Statystyki', icon: '▦' },
-  { key: 'settings', label: 'Ustawienia', icon: '⚙' },
+  { key: 'stats', label: 'Statystyki', icon: '📊' },
+  { key: 'settings', label: 'Ustawienia', icon: '⚙️' },
 ] as const;
+
+const ICON_BOX = 28;
 
 export function AppTabBar({ state }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -61,9 +63,11 @@ export function AppTabBar({ state }: BottomTabBarProps) {
               router.navigate(href as Href);
             }}
           >
-            <Text style={[styles.icon, focused && styles.iconActive]}>
-              {tab.icon}
-            </Text>
+            <View style={styles.iconBox}>
+              <Text style={[styles.icon, focused && styles.iconActive]}>
+                {tab.icon}
+              </Text>
+            </View>
             <Text style={[styles.label, focused && styles.labelActive]}>
               {tab.label}
             </Text>
@@ -91,13 +95,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 48,
   },
-  icon: {
-    fontSize: 20,
-    color: Palette.textMuted,
+  iconBox: {
+    width: ICON_BOX,
+    height: ICON_BOX,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 2,
   },
+  icon: {
+    fontSize: 20,
+    lineHeight: ICON_BOX,
+    textAlign: 'center',
+    includeFontPadding: false,
+    opacity: 0.55,
+  },
   iconActive: {
-    color: Palette.green,
+    opacity: 1,
   },
   label: {
     fontSize: 10,
