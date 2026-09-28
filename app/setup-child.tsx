@@ -36,7 +36,21 @@ export default function SetupChildScreen() {
     try {
       await completeSetup(name.trim(), photoUri ?? undefined);
       router.replace('/(tabs)' as Href);
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === 'EMAIL_ZAJETY') {
+        Alert.alert(
+          'Ten e-mail jest już w bazie',
+          'Konto z tym adresem e-mail już istnieje. Zaloguj się albo dołącz do dziecka kodem.',
+          [
+            { text: 'Zostań tutaj', style: 'cancel' },
+            {
+              text: 'Zaloguj się',
+              onPress: () => router.replace('/login-email' as Href),
+            },
+          ]
+        );
+        return;
+      }
       Alert.alert(
         'Coś poszło nie tak',
         'Nie udało się utworzyć profilu. Sprawdź internet i spróbuj ponownie.'

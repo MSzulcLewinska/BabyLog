@@ -114,7 +114,7 @@ export default function HomeScreen() {
                 style={styles.roundButton}
                 onPress={() => router.push('/children' as Href)}
               >
-                <Text style={styles.roundButtonIcon}>＋</Text>
+                <Text style={styles.childrenIcon}>👶</Text>
               </Pressable>
               <Pressable
                 style={styles.roundButton}
@@ -273,15 +273,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  roundButtonIcon: {
-    fontSize: 24,
-    lineHeight: 28,
-    color: Palette.green,
-    fontWeight: '600',
+  childrenIcon: {
+    fontSize: 21,
+    lineHeight: 26,
   },
   bellIcon: {
     fontSize: 22,
-    color: Palette.green,
+    lineHeight: 26,
   },
   summaryCard: {
     backgroundColor: Palette.card,

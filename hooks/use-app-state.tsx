@@ -4,8 +4,8 @@ import {
 } from '@/lib/notifications';
 import {
   acceptPrivacy,
+  accountsByEmail,
   createChildWithOwner,
-  findChildByEmail,
   hasAcceptedPrivacy,
   hasSavedChild,
   loadPlans,
@@ -17,6 +17,7 @@ import {
   syncAccountEmailToAll,
 } from '@/lib/storage';
 import { loadSession, saveSession } from '@/lib/supabase';
+import type { AccountChild } from '@/lib/storage';
 import type { UserAccount } from '@/lib/types';
 import * as Notifications from 'expo-notifications';
 import {
@@ -36,7 +37,8 @@ type AppStateValue = {
   privacyAccepted: boolean;
   acceptPrivacyPolicy: () => Promise<void>;
   signIn: (user?: Partial<UserAccount>) => Promise<void>;
-  loginWithEmail: (email: string) => Promise<void>;
+  loginWithEmail: (email: string, childId?: string) => Promise<void>;
+  findAccounts: (email: string) => Promise<AccountChild[]>;
   completeSetup: (name: string, photoUri?: string) => Promise<void>;
   markJoined: () => void;
   signOut: () => Promise<void>;
@@ -50,6 +52,39 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [onboarded, setOnboarded] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [userName, setUserName] = useState('');
+
+  const activateAccount = useCallback(
+    async (
+      childId: string,
+      deviceId: string,
+      secret: string,
+      email: string,
+      memberName: string
+    ) => {
+      await saveSession({ childId, deviceId, secret });
+
+      const account: UserAccount = {
+        id: `email-${Date.now()}`,
+        provider: 'email',
+        email,
+        name: memberName,
+        signedInAt: new Date().toISOString(),
+      };
+
+      const existingUser = await loadUser();
+      if (existingUser?.privacyAccepted) {
+        account.privacyAccepted = true;
+      }
+
+      await saveUser(account);
+      setUserName(memberName);
+      setSignedIn(true);
+      setPrivacyAccepted(Boolean(account.privacyAccepted));
+      setOnboarded(true);
+      void registerPushToken();
+    },
+    []
+  );
 
   useEffect(() => {
     let active = true;
@@ -116,16 +151,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       name: user?.name,
       signedInAt: new Date().toISOString(),
     };
-    await saveUser(account);
-    setUserName(account.name ?? '');
-    setSignedIn(true);
-    setPrivacyAccepted(Boolean(user?.privacyAccepted));
     const [session, child] = await Promise.all([
       loadSession(),
       hasSavedChild(),
     ]);
 
+    // Konto jest już na tym urządzeniu (np. po dołączeniu kodem) — tylko
+    // podpinamy e-mail do istniejącego profilu.
     if (session || child) {
+      await saveUser(account);
+      setUserName(account.name ?? '');
+      setSignedIn(true);
+      setPrivacyAccepted(Boolean(user?.privacyAccepted));
+
       if (account.email) {
         try {
           await syncAccountEmailToAll(account.email);
@@ -137,32 +175,37 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // 2. Brak sesji lokalnej — spróbuj przywrócić z chmury po emailu
+    // Brak sesji na urządzeniu. Jeśli e-mail jest już w bazie, nie zakładamy
+    // nowego konta — trzeba się po prostu zalogować lub dołączyć kodem.
     if (account.email) {
-      try {
-        const restored = await findChildByEmail(account.email);
-        if (restored) {
-          await saveSession({
-            childId: restored.childId,
-            deviceId: restored.deviceId,
-            secret: restored.secret,
-          });
-          void registerPushToken();
-          setOnboarded(true);
-          return;
-        }
-      } catch {
-        // offline lub brak wyniku — idziemy do onboardingu
+      const existing = await accountsByEmail(account.email);
+
+      if (existing.length > 0) {
+        throw new Error('EMAIL_ZAJETY');
       }
     }
 
-    // 3. Nowe konto — użytkownik przejdzie do setup-child
+    await saveUser(account);
+    setUserName(account.name ?? '');
+    setSignedIn(true);
+    setPrivacyAccepted(Boolean(user?.privacyAccepted));
     setOnboarded(false);
   }, []);
 
   const completeSetup = useCallback(
     async (name: string, photoUri?: string) => {
       const user = await loadUser();
+
+      // Druga linia obrony przed założeniem konta na zajęty e-mail.
+      // Ten sam e-mail może dodać kolejne dziecko dopiero przez
+      // Ustawienia → Moje dzieci / Dodaj dziecko, nie przez rejestrację.
+      if (user?.email) {
+        const existing = await accountsByEmail(user.email);
+        if (existing.length > 0) {
+          throw new Error('EMAIL_ZAJETY');
+        }
+      }
+
       await createChildWithOwner(
         name.trim(),
         photoUri,
@@ -175,36 +218,51 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [userName]
   );
 
-  const loginWithEmail = useCallback(async (email: string) => {
-    const result = await loginByEmail(email.trim());
-    if (!result) {
-      throw new Error('Nie znaleziono konta z tym adresem e-mail. Sprawdź adres lub dołącz kodem.');
-    }
+  const findAccounts = useCallback(
+    (email: string) => accountsByEmail(email.trim()),
+    []
+  );
 
-    await saveSession({
-      childId: result.childId,
-      deviceId: result.deviceId,
-      secret: result.secret,
-    });
+  const loginWithEmail = useCallback(
+    async (email: string, childId?: string) => {
+      const accounts = await accountsByEmail(email);
 
-    const account: UserAccount = {
-      id: `email-${Date.now()}`,
-      provider: 'email',
-      email: email.trim(),
-      name: result.memberName,
-      signedInAt: new Date().toISOString(),
-    };
-    const existingUser = await loadUser();
-    if (existingUser?.privacyAccepted) {
-      account.privacyAccepted = true;
-    }
-    await saveUser(account);
-    setUserName(result.memberName);
-    setSignedIn(true);
-    setPrivacyAccepted(Boolean(account.privacyAccepted));
-    setOnboarded(true);
-    void registerPushToken();
-  }, []);
+      if (accounts.length === 0) {
+        // starsza baza bez accounts_by_email — próbujemy starego wywołania
+        const fallback = await loginByEmail(email.trim());
+        if (!fallback) {
+          throw new Error(
+            'Nie znaleziono konta z tym adresem e-mail. Sprawdź adres lub dołącz kodem.'
+          );
+        }
+        await activateAccount(
+          fallback.childId,
+          fallback.deviceId,
+          fallback.secret,
+          email.trim(),
+          fallback.memberName
+        );
+        return;
+      }
+
+      const chosen = childId
+        ? accounts.find((account) => account.childId === childId)
+        : accounts[0];
+
+      if (!chosen) {
+        throw new Error('Nie znaleziono konta z tym adresem e-mail.');
+      }
+
+      await activateAccount(
+        chosen.childId,
+        chosen.deviceId,
+        chosen.secret,
+        email.trim(),
+        chosen.memberName
+      );
+    },
+    [activateAccount]
+  );
 
   const markJoined = useCallback(() => {
     setSignedIn(true);
@@ -233,6 +291,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       acceptPrivacyPolicy,
       signIn,
       loginWithEmail,
+      findAccounts,
       completeSetup,
       markJoined,
       signOut,
@@ -245,6 +304,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       acceptPrivacyPolicy,
       signIn,
       loginWithEmail,
+      findAccounts,
       completeSetup,
       markJoined,
       signOut,

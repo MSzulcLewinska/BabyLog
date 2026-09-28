@@ -2,32 +2,181 @@ import { BackHeader } from '@/components/back-header';
 import { PrimaryButton } from '@/components/primary-button';
 import { Palette } from '@/constants/theme';
 import { useLiveData } from '@/hooks/use-live-data';
-import { listChildren, removeLocalChild, switchChild } from '@/lib/storage';
-import { router, type Href } from 'expo-router';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  accountsByEmail,
+  listChildren,
+  loadUser,
+  removeLocalChild,
+  switchChild,
+  type AccountChild,
+} from '@/lib/storage';
+import { saveSession } from '@/lib/supabase';
+import { router, useFocusEffect, type Href } from 'expo-router';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: 'Rodzic',
+  member: 'Opiekun',
+  observer: 'Obserwator',
+};
+
+type Entry = {
+  childId: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  onDevice: boolean;
+  photoUri?: string;
+  account?: AccountChild;
+};
 
 export default function ChildrenScreen() {
-  const children = useLiveData(listChildren) ?? [];
+  const localChildren = useLiveData(listChildren) ?? [];
+  const [emailChildren, setEmailChildren] = useState<AccountChild[] | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const activate = async (childId: string) => {
-    await switchChild(childId);
-    router.back();
+  const loadEmailChildren = useCallback(async () => {
+    try {
+      const user = await loadUser();
+      if (!user?.email) {
+        setEmailChildren([]);
+        return;
+      }
+      setEmailChildren(await accountsByEmail(user.email));
+    } catch {
+      setEmailChildren([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadEmailChildren();
+    }, [loadEmailChildren])
+  );
+
+  const entries: Entry[] = localChildren.map((child) => {
+    const account = (emailChildren ?? []).find(
+      (item) => item.childId === child.childId
+    );
+    return {
+      childId: child.childId,
+      name: child.name,
+      role: child.isOwner ? 'owner' : (account?.role ?? 'member'),
+      isActive: child.isActive,
+      onDevice: true,
+      photoUri: child.photoUri,
+      account,
+    };
+  });
+
+  for (const account of emailChildren ?? []) {
+    if (entries.some((entry) => entry.childId === account.childId)) {
+      continue;
+    }
+    entries.push({
+      childId: account.childId,
+      name: account.childName,
+      role: account.role,
+      isActive: false,
+      onDevice: false,
+      account,
+    });
+  }
+
+  const active = entries.find((entry) => entry.isActive);
+  const others = entries.filter((entry) => !entry.isActive);
+
+  const select = async (entry: Entry) => {
+    try {
+      if (!entry.onDevice && entry.account) {
+        // dziecko powiązane z e-mailem, ale nie dodane na ten telefon
+        await saveSession({
+          childId: entry.account.childId,
+          deviceId: entry.account.deviceId,
+          secret: entry.account.secret,
+        });
+        await switchChild(entry.account.childId);
+      } else {
+        await switchChild(entry.childId);
+      }
+      router.back();
+    } catch {
+      Alert.alert(
+        'Nie udało się przełączyć',
+        'Sprawdź internet i spróbuj ponownie.'
+      );
+    }
   };
 
-  const removeFromDevice = (childId: string, name: string) => {
+  const removeFromDevice = (entry: Entry) => {
     Alert.alert(
       'Usunąć z tego urządzenia?',
-      `Dane dziecka „${name}" zostaną w chmurze. Usuniemy tylko dostęp z tego telefonu.`,
+      `Dane dziecka „${entry.name}" zostaną w chmurze. Usuniemy tylko dostęp z tego telefonu.`,
       [
         { text: 'Anuluj', style: 'cancel' },
         {
           text: 'Usuń',
           style: 'destructive',
-          onPress: () => void removeLocalChild(childId),
+          onPress: () => void removeLocalChild(entry.childId),
         },
       ]
     );
   };
+
+  const renderRow = (entry: Entry) => (
+    <Pressable
+      key={entry.childId}
+      style={styles.row}
+      onPress={() => void select(entry)}
+    >
+      {entry.photoUri ? (
+        <Image
+          source={{ uri: entry.photoUri }}
+          style={styles.avatar}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {entry.name.charAt(0).toUpperCase()}
+          </Text>
+        </View>
+      )}
+      <View style={styles.rowTexts}>
+        <Text style={styles.name}>{entry.name}</Text>
+        <Text style={styles.role}>
+          {ROLE_LABEL[entry.role] ?? 'Członek'}
+          {entry.onDevice ? '' : ' · dodaj na to urządzenie'}
+        </Text>
+      </View>
+      {entry.isActive ? (
+        <Text style={styles.activeBadge}>Aktywne ✓</Text>
+      ) : (
+        <Text style={styles.switchHint}>Przełącz</Text>
+      )}
+      {entry.onDevice && !entry.isActive && entries.length > 1 && (
+        <Pressable
+          hitSlop={10}
+          onPress={() => removeFromDevice(entry)}
+          style={styles.removeWrap}
+        >
+          <Text style={styles.removeIcon}>🗑️</Text>
+        </Pressable>
+      )}
+    </Pressable>
+  );
 
   return (
     <View style={styles.screen}>
@@ -36,55 +185,31 @@ export default function ChildrenScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
-        <View style={styles.card}>
-          {children.map((child, index) => (
-            <Pressable
-              key={child.childId}
-              style={[
-                styles.row,
-                index === children.length - 1 && styles.lastRow,
-              ]}
-              onPress={() => void activate(child.childId)}
-            >
-              {child.photoUri ? (
-                <Image
-                  source={{ uri: child.photoUri }}
-                  style={styles.avatar}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>
-                    {child.name.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-              <View style={styles.rowTexts}>
-                <Text style={styles.name}>{child.name}</Text>
-                <Text style={styles.role}>
-                  {child.isOwner ? 'Rodzic' : 'Opiekun'}
-                </Text>
-              </View>
-              {child.isActive ? (
-                <Text style={styles.activeBadge}>Aktywne ✓</Text>
-              ) : (
-                <Text style={styles.switchHint}>Przełącz</Text>
-              )}
-              {!child.isActive && children.length > 1 && (
-                <Pressable
-                  hitSlop={10}
-                  onPress={() => removeFromDevice(child.childId, child.name)}
-                  style={styles.removeWrap}
-                >
-                  <Text style={styles.removeIcon}>🗑️</Text>
-                </Pressable>
-              )}
-            </Pressable>
-          ))}
-        </View>
+        {active && (
+          <>
+            <Text style={styles.sectionLabel}>Dziecko, na którym jesteś zalogowana</Text>
+            <View style={styles.card}>{renderRow(active)}</View>
+          </>
+        )}
+
+        <Text style={styles.sectionLabel}>Moje dzieci</Text>
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color={Palette.green} />
+          </View>
+        ) : others.length === 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.emptyText}>
+              Do tego adresu e-mail nie są przypisane inne dziecka. Możesz dodać
+              kolejne.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.card}>{others.map(renderRow)}</View>
+        )}
 
         <PrimaryButton
-          label="＋  Dodaj dziecko"
+          label="＋  Dodaj kolejne dziecko"
           onPress={() => router.push('/add-child' as Href)}
         />
       </ScrollView>
@@ -101,6 +226,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 32,
   },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Palette.textSecondary,
+    marginTop: 18,
+    marginBottom: 8,
+  },
   card: {
     backgroundColor: Palette.card,
     borderRadius: 18,
@@ -109,16 +241,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 16,
   },
+  loadingBox: {
+    paddingVertical: 28,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Palette.textSecondary,
+    lineHeight: 20,
+    padding: 16,
+  },
   row: {
-    minHeight: 64,
+    minHeight: 66,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F2F0',
-  },
-  lastRow: {
-    borderBottomWidth: 0,
   },
   avatar: {
     width: 42,

@@ -34,6 +34,27 @@ export default function LoginScreen() {
     try {
       await signIn({ name: trimmedName, email: trimmedEmail });
       // Nawigacją zajmuje się _layout.tsx na podstawie stanu signedIn/onboarded
+    } catch (error) {
+      if (error instanceof Error && error.message === 'EMAIL_ZAJETY') {
+        setBusy(false);
+        Alert.alert(
+          'Ten e-mail jest już w bazie',
+          'Konto z tym adresem e-mail już istnieje. Zaloguj się albo dołącz do dziecka kodem.',
+          [
+            { text: 'Anuluj', style: 'cancel' },
+            {
+              text: 'Zaloguj się',
+              onPress: () => router.replace('/login-email' as Href),
+            },
+          ]
+        );
+        return;
+      }
+      setBusy(false);
+      Alert.alert(
+        'Nie udało się założyć konta',
+        'Sprawdź internet i spróbuj ponownie.'
+      );
     } finally {
       setBusy(false);
     }
