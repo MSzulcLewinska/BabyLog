@@ -36,7 +36,7 @@ create table if not exists public.activities (
   unit text,
   color text not null default '#34C759',
   builtin boolean not null default false,
-  kind text not null check (kind in ('milk', 'poop', 'drops', 'custom')),
+  kind text not null check (kind in ('milk', 'poop', 'drops', 'meal', 'custom')),
   primary key (id, child_id)
 );
 
@@ -44,7 +44,7 @@ create table if not exists public.events (
   id text not null,
   child_id uuid not null references public.children (id) on delete cascade,
   member_id uuid references public.members (id) on delete set null,
-  kind text not null check (kind in ('milk', 'poop', 'drops', 'custom')),
+  kind text not null check (kind in ('milk', 'poop', 'drops', 'meal', 'custom')),
   activity_id text not null,
   title text not null,
   icon text not null,
@@ -77,8 +77,28 @@ create table if not exists public.plans (
   reminder_time text,
   reminder_note text,
   notification_id text,
+  series_id text,
+  series_time text,
   created_at timestamptz not null default now(),
   primary key (id, child_id)
+);
+
+-- pomiary wagi i wzrostu (historia rozwoju dziecka)
+create table if not exists public.measurements (
+  id text not null,
+  child_id uuid not null references public.children (id) on delete cascade,
+  member_id uuid references public.members (id) on delete set null,
+  date text not null,
+  weight_kg numeric,
+  height_cm numeric,
+  note text,
+  author text,
+  created_at timestamptz not null default now(),
+  primary key (id, child_id),
+  constraint measurements_values check (
+    (weight_kg is not null and weight_kg > 0 and weight_kg < 60)
+    or (height_cm is not null and height_cm > 0 and height_cm < 200)
+  )
 );
 
 create index if not exists events_child_date_idx on public.events (child_id, date);
@@ -165,6 +185,7 @@ alter table public.members enable row level security;
 alter table public.activities enable row level security;
 alter table public.events enable row level security;
 alter table public.plans enable row level security;
+alter table public.measurements enable row level security;
 
 -- children
 drop policy if exists "children_insert" on public.children;
@@ -234,6 +255,20 @@ drop policy if exists "plans_member_all" on public.plans;
 create policy "plans_member_select" on public.plans
   for select using (child_id = public.current_member_child ());
 create policy "plans_member_write" on public.plans
+  for all using (
+    child_id = public.current_member_child ()
+    and public.current_member_role () in ('owner', 'member')
+  ) with check (
+    child_id = public.current_member_child ()
+    and public.current_member_role () in ('owner', 'member')
+  );
+
+-- measurements — odczyt dla wszystkich członków, zapis dla rodzica i opiekuna
+drop policy if exists "measurements_member_select" on public.measurements;
+create policy "measurements_member_select" on public.measurements
+  for select using (child_id = public.current_member_child ());
+drop policy if exists "measurements_member_write" on public.measurements;
+create policy "measurements_member_write" on public.measurements
   for all using (
     child_id = public.current_member_child ()
     and public.current_member_role () in ('owner', 'member')
@@ -356,10 +391,24 @@ begin
     returning * into v_member;
   else
     -- Odświeżamy dane osoby po ponownym dołączeniu (np. imię).
+    -- Kto dołącza kodem, zostaje opiekunem — właścicielem może być tylko
+    -- pierwszy członek profilu. Dzięki temu ktoś, kto wszedł jako pierwszy
+    -- na kod, nie zostaje zapisany jako 'owner'.
     update public.members m
     set name = trim(p_name),
-        email = coalesce(nullif(trim(p_email), ''), m.email)
-    where m.id = v_member.id;
+        email = coalesce(nullif(trim(p_email), ''), m.email),
+        role = case
+          when m.role = 'owner' and exists (
+            select 1
+            from public.members o
+            where o.child_id = m.child_id
+              and o.role = 'owner'
+              and (o.created_at, o.id) < (m.created_at, m.id)
+          ) then 'member'
+          else m.role
+        end
+    where m.id = v_member.id
+    returning * into v_member;
   end if;
 
   return query
@@ -558,6 +607,61 @@ $$;
 revoke all on function public.login_by_email (text) from public;
 grant execute on function public.login_by_email (text) to anon, authenticated;
 
+-- ---------- Dziecka przypisane do e-maila ----------
+-- Zwraca WSZYSTKIE dziecka, do których dany e-mail ma dostęp (właściciel,
+-- opiekun lub obserwator). Służy do logowania, wyboru dziecka oraz listy
+-- „Moje dzieci". Kolejność: najpierw dziecka, w których użytkownik jest
+-- rodzicem.
+
+create or replace function public.accounts_by_email (p_email text)
+returns table (
+  out_child_id uuid,
+  out_child_name text,
+  out_share_code text,
+  out_member_id uuid,
+  out_secret uuid,
+  out_role text,
+  out_member_name text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    c.id,
+    c.name,
+    c.share_code,
+    m.id,
+    m.secret,
+    m.role,
+    m.name
+  from public.members m
+  join public.children c on c.id = m.child_id
+  where lower(m.email) = lower(trim(p_email))
+    and m.email is not null
+    and m.email <> ''
+  order by (m.role = 'owner') desc, c.created_at desc;
+$$;
+
+revoke all on function public.accounts_by_email (text) from public;
+grant execute on function public.accounts_by_email (text) to anon, authenticated;
+
+-- ---------- Naprawa: jedno dziecko = jeden rodzic ----------
+-- Jeśli przez pomyłkę kilka osób ma rolę 'owner' tego samego dziecka,
+-- zostawiamy tylko właściciela, który dołączył jako pierwszy. Wszyscy
+-- pozostali (np. mama dołączająca kodem) stają się opiekunami.
+update public.members m
+set role = 'member'
+where m.role = 'owner'
+  and exists (
+    select 1
+    from public.members o
+    where o.child_id = m.child_id
+      and o.role = 'owner'
+      and (o.created_at, o.id) < (m.created_at, m.id)
+  );
+
 -- ---------- Zmiana roli (owner → member/observer) ----------
 
 create or replace function public.update_member_role (
@@ -595,6 +699,18 @@ begin
     raise exception 'NIE_MOZNA_ZMIENIC_OWNERA';
   end if;
 
+  -- członek musi należeć do tego samego dziecka
+  if not exists (
+    select 1 from public.members m
+    where m.id = p_member_id and m.child_id = v_child_id
+  ) then
+    raise exception 'NIE_ZNANY_CZLONEK';
+  end if;
+
+  if p_new_role not in ('member', 'observer') then
+    raise exception 'NIEZNANA_ROLA';
+  end if;
+
   update public.members m
   set role = p_new_role
   where m.id = p_member_id
@@ -604,6 +720,68 @@ $$;
 
 revoke all on function public.update_member_role (uuid, text) from public;
 grant execute on function public.update_member_role (uuid, text) to anon, authenticated;
+
+-- ---------- Naprawa brakującego właściciela ----------
+-- Sytuacja: profil nie ma członka z rolą 'owner' (np. po ponownym dołączeniu
+-- kodem dziecka powstał nowy członek bez roli). Funkcja przywraca rolę
+-- 'owner' NAJSTARSZEMU członkowi dziecka — wyłącznie gdy żaden członek
+-- nie jest właścicielem (czyli gdy naprawa jedynie przywraca stan sprzed
+-- zgubienia właściciela, a nie przekazuje komukolwiek nowe uprawnienia).
+
+create or replace function public.repair_member_role ()
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_member_id uuid;
+  v_child_id uuid;
+  v_owner_count integer;
+  v_oldest_id uuid;
+begin
+  select m.id, m.child_id into v_member_id, v_child_id
+  from public.members m
+  where m.id::text = coalesce(
+    current_setting('request.headers', true)::json ->> 'x-member-id', ''
+  )
+  and m.secret::text = coalesce(
+    current_setting('request.headers', true)::json ->> 'x-member-secret', ''
+  );
+
+  if v_member_id is null then
+    raise exception 'BRAK_SESJI';
+  end if;
+
+  select count(*) into v_owner_count
+  from public.members m
+  where m.child_id = v_child_id and m.role = 'owner';
+
+  if v_owner_count > 0 then
+    return 'JUZ_ISTNIE_WLASCICIEL';
+  end if;
+
+  select m.id into v_oldest_id
+  from public.members m
+  where m.child_id = v_child_id
+  order by m.created_at asc, m.id asc
+  limit 1;
+
+  -- tylko pierwotny twórca profilu może zostać przywrócony
+  if v_oldest_id is distinct from v_member_id then
+    return 'NIE_MOZNA_NAPRAWIC';
+  end if;
+
+  update public.members m
+  set role = 'owner'
+  where m.id = v_member_id;
+
+  return 'NAPRAWIONO';
+end;
+$$;
+
+revoke all on function public.repair_member_role () from public;
+grant execute on function public.repair_member_role () to anon, authenticated;
 
 -- ---------- Aktualizacja e-maila członka ----------
 -- Pozwala podpiąć/zmienić adres e-mail zalogowanego konta (potrzebny do

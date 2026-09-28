@@ -1,4 +1,4 @@
-export type EventKind = 'milk' | 'poop' | 'drops' | 'custom';
+export type EventKind = 'milk' | 'poop' | 'drops' | 'meal' | 'custom';
 
 export type LogEvent = {
   id: string;
@@ -57,6 +57,16 @@ export type UserAccount = {
 
 export type ReminderKind = 'auto' | 'custom';
 
+export type Measurement = {
+  id: string;
+  date: string;
+  weightKg?: number;
+  heightCm?: number;
+  note?: string;
+  author?: string;
+  createdAt: string;
+};
+
 export type Plan = {
   id: string;
   activityId?: string;
@@ -71,4 +81,6 @@ export type Plan = {
   reminderTime?: string;
   reminderNote?: string;
   notificationId?: string;
+  seriesId?: string;
+  seriesTime?: string;
 };

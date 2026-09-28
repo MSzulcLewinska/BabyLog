@@ -19,6 +19,7 @@ import type {
   Activity,
   ChildProfile,
   LogEvent,
+  Measurement,
   Member,
   Plan,
   UserAccount,
@@ -29,6 +30,7 @@ const ACTIVITIES_KEY = 'babylog_activities';
 const CHILD_KEY = 'babylog_child';
 const USER_KEY = 'babylog_user';
 const PLANS_KEY = 'babylog_plans';
+const MEASUREMENTS_KEY = 'babylog_measurements';
 const LEGACY_FEEDINGS_KEY = 'feedings';
 const MIGRATED_KEY = 'babylog_cloud_migrated';
 const PLAN_NOTIFS_KEY = 'babylog_plan_notifs';
@@ -192,6 +194,19 @@ type PlanRow = {
   reminder_time: string | null;
   reminder_note: string | null;
   notification_id: string | null;
+  series_id: string | null;
+  series_time: string | null;
+};
+
+type MeasurementRow = {
+  id: string;
+  child_id: string;
+  date: string;
+  weight_kg: number | null;
+  height_cm: number | null;
+  note: string | null;
+  author: string | null;
+  created_at: string;
 };
 
 function rowToActivity(row: ActivityRow): Activity {
@@ -243,6 +258,8 @@ function rowToPlan(row: PlanRow): Plan {
     reminderTime: row.reminder_time ?? undefined,
     reminderNote: row.reminder_note ?? undefined,
     notificationId: undefined,
+    seriesId: row.series_id ?? undefined,
+    seriesTime: row.series_time ?? undefined,
   };
 }
 
@@ -296,6 +313,36 @@ function planToRow(plan: Plan, childId: string): PlanRow {
     reminder_time: plan.reminderTime ?? null,
     reminder_note: plan.reminderNote ?? null,
     notification_id: null,
+    series_id: plan.seriesId ?? null,
+    series_time: plan.seriesTime ?? null,
+  };
+}
+
+function rowToMeasurement(row: MeasurementRow): Measurement {
+  return {
+    id: row.id,
+    date: row.date,
+    weightKg: row.weight_kg != null ? Number(row.weight_kg) : undefined,
+    heightCm: row.height_cm != null ? Number(row.height_cm) : undefined,
+    note: row.note ?? undefined,
+    author: row.author ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+function measurementToRow(
+  measurement: Measurement,
+  session: { childId: string; memberId?: string }
+): MeasurementRow {
+  return {
+    id: measurement.id,
+    child_id: session.childId,
+    date: measurement.date,
+    weight_kg: measurement.weightKg ?? null,
+    height_cm: measurement.heightCm ?? null,
+    note: measurement.note ?? null,
+    author: measurement.author ?? null,
+    created_at: measurement.createdAt,
   };
 }
 
@@ -733,7 +780,13 @@ export async function listChildren(): Promise<ChildSummary[]> {
 
 export async function switchChild(childId: string): Promise<void> {
   await setActiveChild(childId);
-  await AsyncStorage.multiRemove([CHILD_KEY, EVENTS_KEY, ACTIVITIES_KEY, PLANS_KEY]);
+  await AsyncStorage.multiRemove([
+    CHILD_KEY,
+    EVENTS_KEY,
+    ACTIVITIES_KEY,
+    PLANS_KEY,
+    MEASUREMENTS_KEY,
+  ]);
   notifyDataChanged();
   await Promise.all([loadChild(), loadActivities(), loadEvents(), loadPlans()]);
 }
@@ -757,7 +810,13 @@ export async function removeLocalChild(childId: string): Promise<void> {
     }
   }
 
-  await AsyncStorage.multiRemove([CHILD_KEY, EVENTS_KEY, ACTIVITIES_KEY, PLANS_KEY]);
+  await AsyncStorage.multiRemove([
+    CHILD_KEY,
+    EVENTS_KEY,
+    ACTIVITIES_KEY,
+    PLANS_KEY,
+    MEASUREMENTS_KEY,
+  ]);
   notifyDataChanged();
 }
 
@@ -829,6 +888,113 @@ export async function removePlan(planId: string): Promise<void> {
     plans.filter((plan) => plan.id !== planId)
   );
   notifyDataChanged();
+}
+
+// ---------- Pomiary wagi i wzrostu ----------
+
+export async function loadMeasurements(): Promise<Measurement[]> {
+  if (!isSupabaseConfigured()) {
+    return readCache<Measurement[]>(MEASUREMENTS_KEY, []);
+  }
+
+  try {
+    const session = await requireSession();
+    const { data, error } = await clientFor(session)
+      .from('measurements')
+      .select('*')
+      .eq('child_id', session.childId)
+      .order('date', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    const measurements = ((data ?? []) as unknown as MeasurementRow[])
+      .map(rowToMeasurement)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    await writeCache(MEASUREMENTS_KEY, measurements);
+    return measurements;
+  } catch {
+    return readCache<Measurement[]>(MEASUREMENTS_KEY, []);
+  }
+}
+
+export async function addMeasurement(measurement: Measurement): Promise<void> {
+  try {
+    const session = await requireSession();
+    const { error } = await clientFor(session)
+      .from('measurements')
+      .insert(measurementToRow(measurement, session));
+
+    if (error) {
+      throw error;
+    }
+  } catch {
+    // offline
+  }
+
+  const measurements = await readCache<Measurement[]>(MEASUREMENTS_KEY, []);
+  await writeCache(MEASUREMENTS_KEY, [
+    ...measurements.filter((item) => item.id !== measurement.id),
+    measurement,
+  ].sort((a, b) => a.date.localeCompare(b.date)));
+  await syncProfileFromMeasurements(measurements.concat(measurement));
+  notifyDataChanged();
+}
+
+export async function removeMeasurement(measurementId: string): Promise<void> {
+  try {
+    const session = await requireSession();
+    const { error } = await clientFor(session)
+      .from('measurements')
+      .delete()
+      .eq('id', measurementId)
+      .eq('child_id', session.childId);
+
+    if (error) {
+      throw error;
+    }
+  } catch {
+    // offline
+  }
+
+  const measurements = await readCache<Measurement[]>(MEASUREMENTS_KEY, []);
+  const remaining = measurements.filter((item) => item.id !== measurementId);
+  await writeCache(MEASUREMENTS_KEY, remaining);
+  await syncProfileFromMeasurements(remaining);
+  notifyDataChanged();
+}
+
+/** Ostatni pomiar wagi/wzrostu trafia też do profilu dziecka. */
+async function syncProfileFromMeasurements(measurements: Measurement[]): Promise<void> {
+  const last = measurements[measurements.length - 1];
+  if (!last) return;
+
+  const child = await readCache<ChildProfile | null>(CHILD_KEY, null);
+  if (!child) return;
+
+  const weight = last.weightKg ?? child.weightKg;
+  const height = last.heightCm ?? child.heightCm;
+  if (weight === child.weightKg && height === child.heightCm) return;
+
+  await writeCache(CHILD_KEY, {
+    ...child,
+    weightKg: weight != null ? String(weight) : undefined,
+    heightCm: height != null ? String(height) : undefined,
+  });
+
+  try {
+    const session = await requireSession();
+    await clientFor(session)
+      .from('children')
+      .update({
+        weight_kg: weight != null ? Number(weight) : null,
+        height_cm: height != null ? Number(height) : null,
+      })
+      .eq('id', session.childId);
+  } catch {
+    // offline
+  }
 }
 
 // ---------- Konto (lokalne, mock Google) ----------
@@ -927,6 +1093,69 @@ export async function findChildByEmail(
   };
 }
 
+export type AccountChild = {
+  childId: string;
+  childName: string;
+  shareCode: string;
+  deviceId: string;
+  secret: string;
+  role: 'owner' | 'member' | 'observer';
+  memberName: string;
+};
+
+/**
+ * Wszystkie dziecka powiązane z e-mailem (jako właściciel, opiekun lub
+ * obserwator). Służy do: blokowania zakładania duplikatu konta, wyboru
+ * dziecka przy logowaniu oraz listy „Moje dzieci”.
+ */
+export async function accountsByEmail(email: string): Promise<AccountChild[]> {
+  if (!isSupabaseConfigured() || !email.trim()) {
+    return [];
+  }
+
+  const { data, error } = await getSupabase(null).rpc('accounts_by_email', {
+    p_email: email.trim(),
+  });
+
+  if (error) {
+    // starsza wersja bazy — próbujemy pojedynczego logowania
+    const single = await loginByEmail(email);
+    return single
+      ? [
+          {
+            childId: single.childId,
+            childName: single.childName,
+            shareCode: single.shareCode,
+            deviceId: single.deviceId,
+            secret: single.secret,
+            role: single.role as AccountChild['role'],
+            memberName: single.memberName,
+          },
+        ]
+      : [];
+  }
+
+  const rows = ((data ?? []) as unknown as {
+    out_child_id: string;
+    out_child_name: string;
+    out_share_code: string;
+    out_member_id: string;
+    out_secret: string;
+    out_role: string;
+    out_member_name: string;
+  }[]).filter((row) => row?.out_child_id);
+
+  return rows.map((row) => ({
+    childId: row.out_child_id,
+    childName: row.out_child_name,
+    shareCode: row.out_share_code,
+    deviceId: row.out_member_id,
+    secret: row.out_secret,
+    role: row.out_role as AccountChild['role'],
+    memberName: row.out_member_name,
+  }));
+}
+
 export async function loginByEmail(
   email: string
 ): Promise<{
@@ -977,10 +1206,45 @@ export async function updateMemberRole(
   });
 
   if (error) {
-    throw new Error(error.message === 'BRAK_UPRAWNIEN' ? 'Brak uprawnień właściciela.' : error.message);
+    throw new Error(mapRoleError(error.message));
   }
 
   notifyDataChanged();
+}
+
+function mapRoleError(message: string): string {
+  if (message === 'BRAK_UPRAWNIEN') {
+    return 'Tylko rodzic (właściciel) może zmieniać role.';
+  }
+  if (message === 'NIE_MOZNA_ZMIENIC_OWNERA') {
+    return 'Nie można zmienić roli rodzica.';
+  }
+  if (message === 'NIE_ZNANY_CZLONEK') {
+    return 'Nie znaleziono tego członka.';
+  }
+  return 'Nie udało się zmienić roli.';
+}
+
+/**
+ * Naprawia sytuację, w której profil nie ma właściciela (np. po ponownym
+ * dołączeniu kodem). Przywraca rolę 'owner' najstarszemu członkowi dziecka —
+ * wyłącznie wtedy, gdy żaden członek nie jest właścicielem.
+ */
+export async function repairMemberRole(): Promise<'NAPRAWIONO' | 'JUZ_ISTNIE_WLASCICIEL' | 'NIE_MOZNA_NAPRAWIC'> {
+  const session = await requireSession();
+  const { data, error } = await clientFor(session).rpc('repair_member_role');
+
+  if (error) {
+    throw new Error(mapRoleError(error.message));
+  }
+
+  const value = (Array.isArray(data) ? data[0] : data) as string | null;
+  if (value === 'NAPRAWIONO') {
+    notifyDataChanged();
+    return 'NAPRAWIONO';
+  }
+  if (value === 'JUZ_ISTNIE_WLASCICIEL') return 'JUZ_ISTNIE_WLASCICIEL';
+  return 'NIE_MOZNA_NAPRAWIC';
 }
 
 // ---------- Tworzenie dziecka / dołączanie / migracja ----------

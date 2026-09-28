@@ -8,6 +8,7 @@ import {
   loadChild,
   loadUser,
   removeChildMember,
+  repairMemberRole,
   updateMemberRole,
 } from '@/lib/storage';
 import type { Member } from '@/lib/types';
@@ -136,9 +137,38 @@ export default function SettingsScreen() {
         {
           text: label,
           onPress: () => {
-            void updateMemberRole(member.id, newRole).catch(() => {
-              Alert.alert('Błąd', 'Nie udało się zmienić roli.');
-            });
+            void (async () => {
+              try {
+                await updateMemberRole(member.id, newRole);
+                Alert.alert(
+                  'Rola zmieniona',
+                  `„${member.name}" ma teraz rolę: ${label}.`
+                );
+              } catch (error) {
+                const message =
+                  error instanceof Error ? error.message : 'Nie udało się zmienić roli.';
+
+                // Profil bez właściciela (np. po ponownym dołączeniu kodem) —
+                // próbujemy przywrócić rolę rodzica i powtarzamy operację.
+                if (message.includes('Tylko rodzic')) {
+                  try {
+                    const result = await repairMemberRole();
+                    if (result === 'NAPRAWIONO') {
+                      await updateMemberRole(member.id, newRole);
+                      Alert.alert(
+                        'Rola zmieniona',
+                        `„${member.name}" ma teraz rolę: ${label}.`
+                      );
+                      return;
+                    }
+                  } catch {
+                    // spadamy do komunikatu poniżej
+                  }
+                }
+
+                Alert.alert('Błąd', message);
+              }
+            })();
           },
         },
       ]
@@ -194,6 +224,12 @@ export default function SettingsScreen() {
             onPress={() => router.push('/edit-account' as Href)}
           />
           <SettingsRow
+            icon="👶"
+            label="Moje dzieci"
+            sub="Przełącz profil lub dodaj kolejne"
+            onPress={() => router.push('/children' as Href)}
+          />
+          <SettingsRow
             icon="🚪"
             label="Wyloguj się"
             onPress={handleSignOut}
@@ -222,6 +258,33 @@ export default function SettingsScreen() {
               />
             );
           })}
+        </View>
+
+        <Text style={styles.sectionLabel}>Dziecko</Text>
+        <View style={styles.card}>
+          <SettingsRow
+            icon="📈"
+            label="Waga i wzrost"
+            sub={[
+              child?.weightKg ? `${child.weightKg} kg` : null,
+              child?.heightCm ? `${child.heightCm} cm` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'Historia i wykres'}
+            onPress={() => router.push('/growth' as Href)}
+          />
+          <SettingsRow
+            icon="🍎"
+            label="Lista BLW"
+            sub="Produkty do próbowania"
+            onPress={() => router.push('/diet' as Href)}
+          />
+          <SettingsRow
+            icon="✏️"
+            label="Edytuj profil dziecka"
+            onPress={() => router.push('/edit-child' as Href)}
+            last
+          />
         </View>
 
         <Text style={styles.sectionLabel}>Udostępnianie</Text>

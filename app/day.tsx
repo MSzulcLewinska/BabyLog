@@ -1,12 +1,13 @@
 import { BackHeader } from '@/components/back-header';
 import { EventTimeline } from '@/components/event-timeline';
+import { PrimaryButton } from '@/components/primary-button';
 import { TemperatureChart } from '@/components/temperature-chart';
 import { Palette } from '@/constants/theme';
 import { useLiveData } from '@/hooks/use-live-data';
 import { formatLongDate, parseDateKey, toDateKey } from '@/lib/dates';
 import { loadEvents, loadPlans } from '@/lib/storage';
 import type { LogEvent, Plan } from '@/lib/types';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -101,6 +102,15 @@ export default function DayScreen() {
             emptyTitle="Brak zdarzeń"
             emptyText="Ten dzień jest jeszcze pusty"
           />
+
+          <View style={styles.addWrapper}>
+            <PrimaryButton
+              label="DODAJ WPIS DO TEGO DNIA"
+              onPress={() =>
+                router.push(`/log?date=${dateKey}` as Href)
+              }
+            />
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -169,5 +179,8 @@ const styles = StyleSheet.create({
   sectionCount: {
     fontSize: 12,
     color: Palette.textMuted,
+  },
+  addWrapper: {
+    marginTop: 16,
   },
 });

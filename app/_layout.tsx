@@ -94,6 +94,8 @@ function RootNavigator() {
         <Stack.Screen name="edit-account" />
         <Stack.Screen name="add-plan" />
         <Stack.Screen name="plans" />
+        <Stack.Screen name="growth" />
+        <Stack.Screen name="add-meal" />
       </Stack>
       <StatusBar style="dark" />
     </ThemeProvider>

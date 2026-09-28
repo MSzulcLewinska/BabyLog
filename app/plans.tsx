@@ -54,6 +54,26 @@ export default function PlansScreen() {
     ]);
   };
 
+  const handleDeleteSeries = (series: Plan[]) => {
+    Alert.alert(
+      'Usuń powtarzane przypomnienie',
+      `Usunąć wszystkie powtórzenia (${series.length})?`,
+      [
+        {
+          text: 'Usuń wszystkie',
+          style: 'destructive',
+          onPress: () => {
+            for (const plan of series) {
+              void cancelPlanReminder(plan).then(() => removePlan(plan.id));
+              setHiddenIds((current) => [...current, plan.id]);
+            }
+          },
+        },
+        { text: 'Anuluj', style: 'cancel' },
+      ]
+    );
+  };
+
   return (
     <View style={styles.screen}>
       <BackHeader title="Zaplanowane" />
@@ -72,43 +92,87 @@ export default function PlansScreen() {
             </View>
           )}
 
-          {sorted.map((plan) => {
+          {sorted.map((plan, index) => {
             const isPast =
               plan.date < todayKey ||
               (plan.date === todayKey && plan.time <= nowTime);
 
+            const series =
+              plan.seriesId
+                ? sorted.filter((item) => item.seriesId === plan.seriesId)
+                : [];
+            const isSeriesStart = series.length > 0 && series[0].id === plan.id;
+            const isSeriesEnd =
+              series.length > 0 && series[series.length - 1].id === plan.id;
+            const next = sorted[index + 1];
+            const continuesSeries =
+              plan.seriesId != null && next?.seriesId === plan.seriesId;
+
             return (
-              <View key={plan.id} style={styles.card}>
-                <View style={[styles.stripe, { backgroundColor: plan.color }]} />
-                <View style={styles.cardBody}>
-                  <View style={styles.cardTop}>
-                    <Text style={styles.icon}>{plan.icon}</Text>
-                    <Text
-                      style={[styles.title, isPast && styles.titlePast]}
+              <View key={plan.id}>
+                {isSeriesStart && (
+                  <View style={styles.seriesHeader}>
+                    <Text style={styles.seriesIcon}>🔁</Text>
+                    <View style={styles.seriesTexts}>
+                      <Text style={styles.seriesTitle}>
+                        {series.length > 1
+                          ? `Codziennie · ${series.length} powtórzeń`
+                          : 'Dwa razy dziennie'}
+                      </Text>
+                      <Text style={styles.seriesSub}>
+                        {plan.seriesTime} · {series[0].date} –{' '}
+                        {series[series.length - 1].date}
+                      </Text>
+                    </View>
+                    <Pressable
+                      hitSlop={10}
+                      onPress={() => handleDeleteSeries(series)}
                     >
-                      {plan.title}
-                    </Text>
-                    <Text style={styles.when}>
-                      {plan.date === todayKey ? 'Dziś' : plan.date} · {plan.time}
-                    </Text>
+                      <Text style={styles.seriesDelete}>Usuń serię</Text>
+                    </Pressable>
                   </View>
-                  <Text style={styles.reminder}>
-                    🔔 {describeReminder(plan)}
-                    {isPast ? ' — minione' : ''}
-                  </Text>
-                  {(plan.note || plan.reminderNote) && (
-                    <Text style={styles.note} numberOfLines={2}>
-                      {plan.reminderNote ?? plan.note}
-                    </Text>
-                  )}
-                </View>
-                <Pressable
-                  hitSlop={10}
-                  onPress={() => handleDelete(plan)}
-                  style={styles.delete}
+                )}
+
+                <View
+                  style={[
+                    styles.card,
+                    isSeriesStart && styles.cardSeriesTop,
+                    continuesSeries && styles.cardSeriesMiddle,
+                    isSeriesEnd && styles.cardSeriesBottom,
+                  ]}
                 >
-                  <Text style={styles.deleteIcon}>🗑️</Text>
-                </Pressable>
+                  <View style={[styles.stripe, { backgroundColor: plan.color }]} />
+                  <View style={styles.cardBody}>
+                    <View style={styles.cardTop}>
+                      <Text style={styles.icon}>{plan.icon}</Text>
+                      <Text
+                        style={[styles.title, isPast && styles.titlePast]}
+                      >
+                        {plan.title}
+                      </Text>
+                      <Text style={styles.when}>
+                        {plan.date === todayKey ? 'Dziś' : plan.date} ·{' '}
+                        {plan.time}
+                      </Text>
+                    </View>
+                    <Text style={styles.reminder}>
+                      🔔 {describeReminder(plan)}
+                      {isPast ? ' — minione' : ''}
+                    </Text>
+                    {(plan.note || plan.reminderNote) && (
+                      <Text style={styles.note} numberOfLines={2}>
+                        {plan.reminderNote ?? plan.note}
+                      </Text>
+                    )}
+                  </View>
+                  <Pressable
+                    hitSlop={10}
+                    onPress={() => handleDelete(plan)}
+                    style={styles.delete}
+                  >
+                    <Text style={styles.deleteIcon}>🗑️</Text>
+                  </Pressable>
+                </View>
               </View>
             );
           })}
@@ -209,5 +273,58 @@ const styles = StyleSheet.create({
   deleteIcon: {
     fontSize: 16,
     opacity: 0.7,
+  },
+  seriesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Palette.greenSoft,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Palette.greenMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  seriesIcon: {
+    fontSize: 16,
+  },
+  seriesTexts: {
+    flex: 1,
+  },
+  seriesTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Palette.greenDark,
+  },
+  seriesSub: {
+    fontSize: 11,
+    color: Palette.textSecondary,
+    marginTop: 1,
+  },
+  seriesDelete: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Palette.danger,
+  },
+  cardSeriesTop: {
+    marginTop: 0,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  cardSeriesMiddle: {
+    marginBottom: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
+  cardSeriesBottom: {
+    marginBottom: 10,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
   },
 });

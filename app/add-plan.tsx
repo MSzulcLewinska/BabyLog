@@ -28,11 +28,20 @@ import {
 } from 'react-native';
 
 const MINUTE_OPTIONS = [15, 30, 45, 60];
+const MAX_REPEAT_DAYS = 30;
+const MAX_OCCURRENCES = 60;
 
 function nextFullHour(): Date {
   const now = new Date();
   now.setHours(now.getHours() + 1, 0, 0, 0);
   return now;
+}
+
+function addDays(base: Date, days: number): Date {
+  const next = new Date(base);
+  next.setDate(next.getDate() + days);
+  next.setHours(0, 0, 0, 0);
+  return next;
 }
 
 export default function AddPlanScreen() {
@@ -42,6 +51,9 @@ export default function AddPlanScreen() {
   );
   const [date, setDate] = useState(new Date());
   const [time, setTime] = useState(nextFullHour());
+  const [secondTime, setSecondTime] = useState<Date | null>(null);
+  const [repeatDaily, setRepeatDaily] = useState(false);
+  const [repeatUntil, setRepeatUntil] = useState<Date | null>(null);
   const [note, setNote] = useState('');
 
   const [reminderKind, setReminderKind] = useState<ReminderKind>('auto');
@@ -62,28 +74,94 @@ export default function AddPlanScreen() {
     if (saving) return;
     if (!selectedActivity) return;
 
-    const plan: Plan = {
+    if (repeatDaily && !repeatUntil) {
+      Alert.alert(
+        'Wybierz datę końcową',
+        'Określ, do kiedy przypomnienie ma się powtarzać.'
+      );
+      return;
+    }
+
+    if (secondTime && formatTime(secondTime) === formatTime(time)) {
+      Alert.alert(
+        'Ta sama godzina',
+        'Druga godzina musi różnić się od pierwszej.'
+      );
+      return;
+    }
+
+    const times = secondTime
+      ? [formatTime(time), formatTime(secondTime)]
+      : [formatTime(time)];
+
+    // Zamiast skomplikowanych reguł powtarzania tworzymy po jednym planie
+    // na każde wystąpienie — działa to zgodnie z resztą aplikacji
+    // (powiadomienia, lista planów, edycja, usuwanie).
+    const occurrences: { date: Date; time: string }[] = [];
+    if (repeatDaily && repeatUntil) {
+      const end = new Date(repeatUntil);
+      end.setHours(0, 0, 0, 0);
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+
+      if (end.getTime() < start.getTime()) {
+        Alert.alert(
+          'Zła data',
+          'Data końcowa nie może być wcześniejsza niż data pierwszego przypomnienia.'
+        );
+        return;
+      }
+
+      const dayCount = Math.min(
+        Math.round((end.getTime() - start.getTime()) / 86400000) + 1,
+        MAX_REPEAT_DAYS
+      );
+
+      for (let day = 0; day < dayCount; day += 1) {
+        for (const timeValue of times) {
+          if (occurrences.length >= MAX_OCCURRENCES) break;
+          occurrences.push({ date: addDays(start, day), time: timeValue });
+        }
+      }
+    } else {
+      occurrences.push({ date, time: times[0] });
+      if (secondTime) occurrences.push({ date, time: times[1] });
+    }
+
+    const isSeries = repeatDaily || Boolean(secondTime);
+    const seriesId = isSeries ? newId() : undefined;
+    const seriesTime = times.join(', ');
+
+    const buildPlan = (occurrence: {
+      date: Date;
+      time: string;
+    }): Plan => ({
       id: newId(),
       activityId: selectedActivity.id,
       title: selectedActivity.name,
       icon: selectedActivity.icon,
       color: selectedActivity.color,
-      date: toDateKey(date),
-      time: formatTime(time),
+      date: toDateKey(occurrence.date),
+      time: occurrence.time,
       note: note.trim() || undefined,
       reminderKind,
       minutesBefore: reminderKind === 'auto' ? minutesBefore : undefined,
       reminderTime:
         reminderKind === 'auto'
-          ? formatTime(autoReminderTime())
+          ? formatTime(autoReminderTime(occurrence.date, occurrence.time))
           : formatTime(reminderTime),
       reminderNote:
         reminderKind === 'custom' ? reminderNote.trim() || undefined : undefined,
-    };
+      seriesId,
+      seriesTime,
+    });
 
-    const triggerAt = reminderDate(plan);
+    const plans = occurrences.map(buildPlan);
+    const upcoming = plans.filter(
+      (item) => (reminderDate(item)?.getTime() ?? 0) > Date.now()
+    );
 
-    if (!triggerAt || triggerAt.getTime() <= Date.now()) {
+    if (upcoming.length === 0) {
       Alert.alert(
         'Godzina z przeszłości',
         'Wybrana godzina przypomnienia już minęła. Wybierz późniejszą.'
@@ -97,20 +175,31 @@ export default function AddPlanScreen() {
 
       if (!granted) return;
 
-      const notificationId = await schedulePlanReminder(plan);
-      if (notificationId) {
-        await setLocalNotifId(plan.id, notificationId);
+      for (const item of upcoming) {
+        const notificationId = await schedulePlanReminder(item);
+        if (notificationId) {
+          await setLocalNotifId(item.id, notificationId);
+        }
+        await addPlan(item);
       }
-      await addPlan(plan);
 
       const session = await loadSession();
       if (session) {
-        void notifyOtherMembers(plan, session.deviceId);
+        void notifyOtherMembers(plans[0], session.deviceId);
       }
+
+      const summary = upcoming
+        .map((item) => `${item.date} ${item.time}`)
+        .slice(0, 3)
+        .join(', ');
 
       Alert.alert(
         'Zaplanowano',
-        `${plan.icon} ${plan.title} — ${plan.date}, godz. ${plan.time}. Przypomnienie: ${describeReminderText(plan)}`,
+        upcoming.length === 1
+          ? `${plans[0].icon} ${plans[0].title} — ${summary}. Przypomnienie: ${describeReminderText(upcoming[0])}`
+          : `${plans[0].icon} ${plans[0].title} — ${upcoming.length} przypomnień (${summary}${
+              upcoming.length > 3 ? '…' : ''
+            }). Przypomnienie: ${describeReminderText(upcoming[0])}`,
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } finally {
@@ -118,9 +207,9 @@ export default function AddPlanScreen() {
     }
   };
 
-  const autoReminderTime = () => {
-    const base = new Date(date);
-    const [hours, minutes] = formatTime(time).split(':').map(Number);
+  const autoReminderTime = (baseDate: Date, timeValue: string) => {
+    const base = new Date(baseDate);
+    const [hours, minutes] = timeValue.split(':').map(Number);
     base.setHours(hours, minutes, 0, 0);
     return new Date(base.getTime() - minutesBefore * 60000);
   };
@@ -166,6 +255,64 @@ export default function AddPlanScreen() {
           />
 
           <TimeField value={time} onChange={setTime} />
+
+          <Pressable
+            style={styles.repeatToggle}
+            onPress={() => setSecondTime(secondTime ? null : nextFullHour())}
+          >
+            <View
+              style={[
+                styles.radio,
+                secondTime && styles.radioSelected,
+              ]}
+            >
+              {secondTime ? <Text style={styles.check}>✓</Text> : null}
+            </View>
+            <View style={styles.optionTexts}>
+              <Text style={styles.optionLabel}>Druga godzina tego samego dnia</Text>
+              <Text style={styles.optionHint}>
+                Np. lek rano i wieczorem (2 razy dziennie)
+              </Text>
+            </View>
+          </Pressable>
+
+          {secondTime && (
+            <TimeField
+              label="Druga godzina"
+              value={secondTime}
+              onChange={setSecondTime}
+            />
+          )}
+
+          <Pressable
+            style={styles.repeatToggle}
+            onPress={() => setRepeatDaily((current) => !current)}
+          >
+            <View
+              style={[
+                styles.radio,
+                repeatDaily && styles.radioSelected,
+              ]}
+            >
+              {repeatDaily ? <Text style={styles.check}>✓</Text> : null}
+            </View>
+            <View style={styles.optionTexts}>
+              <Text style={styles.optionLabel}>Powtarzaj codziennie</Text>
+              <Text style={styles.optionHint}>
+                Np. codziennie do 15. dnia miesiąca
+              </Text>
+            </View>
+          </Pressable>
+
+          {repeatDaily && (
+            <DateField
+              label="Powtarzaj do dnia"
+              value={repeatUntil ?? date}
+              onChange={setRepeatUntil}
+              minimumDate={date}
+              maximumDate={addDays(date, MAX_REPEAT_DAYS)}
+            />
+          )}
 
           <FormField
             label="Notatka do planu (opcjonalnie)"
@@ -405,5 +552,16 @@ const styles = StyleSheet.create({
   },
   minuteTextActive: {
     color: '#FFFFFF',
+  },
+  repeatToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Palette.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 16,
   },
 });

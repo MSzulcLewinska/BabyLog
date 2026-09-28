@@ -1,6 +1,7 @@
 import KeyboardAwareForm from '@/components/KeyboardAwareForm';
 import { BackHeader } from '@/components/back-header';
 import { FormField } from '@/components/form-field';
+import { DateField } from '@/components/date-field';
 import { FormHero } from '@/components/form-hero';
 import { PrimaryButton } from '@/components/primary-button';
 import { TimeField } from '@/components/time-field';
@@ -39,6 +40,7 @@ const FALLBACK: Record<EventKind, Pick<Activity, 'name' | 'icon' | 'unit' | 'col
   milk: { name: 'Mleko', icon: '🍼', unit: 'ml', color: Palette.green },
   poop: { name: 'Kupa', icon: '💩', color: '#C4A35A' },
   drops: { name: 'Krople / witaminy', icon: '💧', color: '#3B82F6' },
+  meal: { name: 'Posiłek', icon: '🍽️', color: '#F59E0B' },
   custom: { name: 'Czynność', icon: '✨', color: Palette.green },
 };
 
@@ -48,6 +50,7 @@ export default function LogScreen() {
     activityId?: string;
     dropKind?: string;
     eventId?: string;
+    date?: string;
   }>();
 
   const kind = (params.kind as EventKind) || 'milk';
@@ -55,6 +58,13 @@ export default function LogScreen() {
   const liveEvents = useLiveData(loadEvents);
   const [time, setTime] = useState(new Date());
   const [endTime, setEndTime] = useState<Date | null>(null);
+  const [eventDate, setEventDate] = useState<Date>(() => {
+    if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
+      const [y, m, d] = params.date.split('-').map(Number);
+      return new Date(y, (m ?? 1) - 1, d);
+    }
+    return new Date();
+  });
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [dropKind, setDropKind] = useState(params.dropKind || 'vitamin-d');
@@ -177,7 +187,7 @@ export default function LogScreen() {
           icon: meta.icon,
           color: meta.color,
           time: formatTime(time),
-          date: toDateKey(new Date()),
+          date: toDateKey(eventDate),
           endTime: isSleep && endTime ? formatTime(endTime) : undefined,
           amount: amountForSave,
           unit: isSleep ? 'min' : kind === 'drops' || kind === 'poop' ? undefined : meta.unit,
@@ -228,6 +238,13 @@ export default function LogScreen() {
               })}
             </View>
           )}
+
+          <DateField
+            label="Data wpisu"
+            value={eventDate}
+            onChange={setEventDate}
+            maximumDate={new Date()}
+          />
 
           {isSleep ? (
             <View style={styles.sleepSection}>
